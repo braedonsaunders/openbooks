@@ -35,10 +35,12 @@ export async function loadBatchBillEntry(): Promise<BatchBillEntryData> {
     isMultiSubsidiary(orgId),
   ])
   if (!org?.base_currency) throw new Error('Organization base currency is not configured')
+  const entities = (await subsidiaryOptions(false, false, orgId)).filter((option) => (!scope || scope.has(option.id)) && (multiSubsidiary || option.parentId === null))
+  const defaultEntity = entities[0]
+  if (!defaultEntity) notFound()
+  if (!defaultEntity.baseCurrency) throw new Error('An accessible legal entity with a configured functional currency is required')
   const subsidiaries = multiSubsidiary
-    ? (await subsidiaryOptions(false, false, orgId))
-        .filter((option) => !scope || scope.has(option.id))
-        .map((option) => ({ id: option.id, name: option.name }))
+    ? entities.map((option) => ({ id: option.id, name: option.name, baseCurrency: option.baseCurrency }))
     : null
   const taxProfiles: BatchTaxProfile[] = [
     ...taxCodes.map((code) => ({ value: `code:${code.id}`, label: code.code ?? code.name ?? '', components: code.tax_components ?? [] })),
@@ -48,12 +50,13 @@ export async function loadBatchBillEntry(): Promise<BatchBillEntryData> {
     orgId,
     userId: authz.user.id,
     today,
-    minorUnits: currencyMinorUnits(org.base_currency),
+    currency: defaultEntity.baseCurrency,
+    minorUnits: currencyMinorUnits(defaultEntity.baseCurrency),
     vendors: vendors.map((vendor) => ({ id: vendor.id, display_name: vendor.display_name ?? '', short_code: vendor.short_code ?? null })),
     accounts: accounts.map((account) => ({ id: account.id, number: account.number ?? null, name: account.name ?? '' })),
     taxProfiles,
     subsidiaries: subsidiaries && subsidiaries.length > 0 ? subsidiaries : null,
-    defaultSubsidiaryId: subsidiaries?.[0]?.id ?? null,
+    defaultSubsidiaryId: defaultEntity.id,
     canPost: can(authz, postPermission(BATCH_BILL_KIND)),
     canCreateVendor: can(authz, 'parties.manage'),
     helpHref: '/docs/batch-bill-entry',

@@ -22,6 +22,7 @@
     "status": "状态"
   },
   "control": {
+    "entityLocked": "请先选择法律实体再录入账单。更改实体或币种前请清空批次。",
     "heading": "控制总数",
     "subsidiary": "子公司",
     "count": "账单张数",

@@ -88,7 +88,7 @@ function scriptFetch(options: { duplicates?: (url: string) => unknown[]; post?: 
   return { calls, restore: () => { globalThis.fetch = prior } }
 }
 
-async function mount({ canPost = true }: { canPost?: boolean } = {}) {
+async function mount({ canPost = true, subsidiaries = null }: { canPost?: boolean; subsidiaries?: React.ComponentProps<typeof BatchBillEntry>['subsidiaries'] } = {}) {
   const host = document.createElement('div')
   document.body.appendChild(host)
   const root = createRoot(host)
@@ -98,6 +98,7 @@ async function mount({ canPost = true }: { canPost?: boolean } = {}) {
         <MoneyProvider currency="USD">
           <ShortcutProvider>
             <BatchBillEntry
+              currency="USD"
               orgId={ORG}
               userId={USER}
               today="2026-10-21"
@@ -111,8 +112,8 @@ async function mount({ canPost = true }: { canPost?: boolean } = {}) {
                 { id: FREIGHT, number: '6200', name: 'Freight' },
               ]}
               taxProfiles={[]}
-              subsidiaries={null}
-              defaultSubsidiaryId={null}
+              subsidiaries={subsidiaries}
+              defaultSubsidiaryId={subsidiaries?.[0]?.id ?? null}
               canPost={canPost}
               canCreateVendor={false}
               helpHref="/docs/batch-bill-entry"
@@ -289,4 +290,26 @@ test('an unsaved batch is restored from the browser with an offer to discard it'
   assert.equal(labelledInput(host, 'Number of bills').value, '1')
   assert.match(host.textContent ?? '', /Entered: 1 bill · \$12\.34/)
   assert.ok([...host.querySelectorAll('button')].some((button) => button.textContent?.trim() === 'Discard'))
+})
+
+test('a batch uses its legal entity currency and cannot reinterpret entered amounts by changing entity', async (t) => {
+  resetBrowserState()
+  const scripted = scriptFetch()
+  t.after(scripted.restore)
+  const { host, done } = await mount({ subsidiaries: [
+    { id: 'entity-us', name: 'US company', baseCurrency: 'USD' },
+    { id: 'entity-jp', name: 'Japan company', baseCurrency: 'JPY' },
+  ] })
+  t.after(done)
+  const entity = host.querySelector<HTMLSelectElement>('select')!
+  assert.ok(entity)
+  await act(async () => { entity.value = 'entity-jp'; entity.dispatchEvent(new window.Event('change', { bubbles: true })); await tick() })
+  await paste(cell(host, 0, 0), 'Vendor\tVendor ref #\tAmount\nACME\tJPY-1\t1785')
+  assert.equal(entity.disabled, true)
+  assert.ok(host.textContent?.includes('JPY'))
+  await press({ key: 's', code: 'KeyS', ...PRIMARY })
+  const create = scripted.calls.find((call) => call.url === '/api/documents' && call.method === 'POST')
+  assert.ok(create)
+  assert.equal(create.body.currency, 'JPY')
+  assert.equal(create.body.subsidiaryId, 'entity-jp')
 })

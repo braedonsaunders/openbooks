@@ -22,6 +22,7 @@
     "status": "Bearbeitungsstand"
   },
   "control": {
+    "entityLocked": "Wählen Sie die juristische Einheit vor der Rechnungseingabe. Leeren Sie den Stapel, bevor Sie Einheit oder Währung ändern.",
     "heading": "Kontrollsummen",
     "subsidiary": "Tochtergesellschaft",
     "count": "Anzahl Rechnungen",

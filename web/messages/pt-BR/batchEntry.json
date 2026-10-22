@@ -22,6 +22,7 @@
     "status": "Situação"
   },
   "control": {
+    "entityLocked": "Escolha a entidade jurídica antes de lançar faturas. Esvazie o lote antes de alterar a entidade ou a moeda.",
     "heading": "Totais de controle",
     "subsidiary": "Subsidiária",
     "count": "Número de contas",

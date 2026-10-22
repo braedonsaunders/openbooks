@@ -372,6 +372,7 @@ export async function saveBatchRow(
     hasTax: boolean
     subsidiaryId?: string | null
     expectedTotal?: string | null
+    currency?: string
     transport: Transport
     copy: BatchSaveCopy
   },
@@ -384,7 +385,7 @@ export async function saveBatchRow(
   if (!documentId) {
     const request = buildDocumentCreateRequest(
       BATCH_BILL_KIND,
-      batchRowPayload(row, { hasTax: options.hasTax, subsidiaryId: options.subsidiaryId }),
+      { ...batchRowPayload(row, { hasTax: options.hasTax, subsidiaryId: options.subsidiaryId }), ...(options.currency ? { currency: options.currency } : {}) },
       row.idempotencyKey,
     )
     const created = await call(options.transport, request.path, {

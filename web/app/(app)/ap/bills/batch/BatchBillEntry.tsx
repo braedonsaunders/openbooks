@@ -14,6 +14,7 @@ import { useMoney } from '../../../../../components/money-provider'
 import { readApiErrorMessage } from '../../../../../lib/api-error'
 import { confirmDialog } from '../../../../../lib/confirm'
 import { formatEntryDate } from '../../../../../lib/date-entry'
+import { currencyMinorUnits } from '../../../../../lib/iso-currencies'
 import { displayEnteredAmount } from '../../../../../lib/entry-amount'
 import { useUnsavedNavigationGuard } from '../../../../../lib/use-unsaved-navigation-guard'
 import {
@@ -72,11 +73,12 @@ export interface BatchBillEntryProps {
   userId: string
   today: string
   minorUnits: number
+  currency: string
   vendors: BatchVendorOption[]
   accounts: BatchAccountOption[]
   taxProfiles: BatchTaxProfile[]
   /** Multi-subsidiary organizations choose one legal entity per batch. */
-  subsidiaries: { id: string; name: string }[] | null
+  subsidiaries: { id: string; name: string; baseCurrency: string }[] | null
   defaultSubsidiaryId: string | null
   canPost: boolean
   canCreateVendor: boolean
@@ -103,7 +105,7 @@ export function BatchBillEntry({
   orgId,
   userId,
   today,
-  minorUnits,
+  currency,
   vendors,
   accounts,
   taxProfiles,
@@ -115,7 +117,7 @@ export function BatchBillEntry({
 }: BatchBillEntryProps) {
   const t = useTranslations('batchEntry')
   const locale = useLocale()
-  const { money } = useMoney()
+  const { money: formatMoney } = useMoney()
   const storageKey = batchDraftKey(orgId, userId)
   const hasTax = taxProfiles.length > 0
   const rootRef = useRef<HTMLDivElement>(null)
@@ -136,6 +138,8 @@ export function BatchBillEntry({
   const [controlCount, setControlCount] = useState('')
   const [controlTotal, setControlTotal] = useState('')
   const [subsidiaryId, setSubsidiaryId] = useState(defaultSubsidiaryId ?? '')
+  const batchCurrency = subsidiaries?.find((entity) => entity.id === subsidiaryId)?.baseCurrency ?? currency
+  const money = useCallback((...args: Parameters<typeof formatMoney>) => formatMoney(args[0], { ...args[1], currency: batchCurrency }), [formatMoney, batchCurrency])
   const [running, setRunning] = useState(false)
   const runningRef = useRef(false)
   const [busy, setBusy] = useState<ReadonlySet<string>>(() => new Set())
@@ -448,7 +452,8 @@ export function BatchBillEntry({
             post,
             hasTax,
             expectedTotal: batchRowTotal(row, saveTaxes),
-            subsidiaryId: subsidiaries ? subsidiaryId || null : null,
+            subsidiaryId: subsidiaryId || defaultSubsidiaryId,
+            currency: batchCurrency,
             transport: browserFetch,
             copy,
           })
@@ -517,7 +522,7 @@ export function BatchBillEntry({
     const next = clearFinishedRows(rows, { count: controlCount, total: controlTotal }, rowTaxes, today)
     commitRows(next.rows)
     setControlCount(next.control.count)
-    setControlTotal(next.control.total === controlTotal ? controlTotal : displayEnteredAmount(next.control.total, minorUnits))
+    setControlTotal(next.control.total === controlTotal ? controlTotal : displayEnteredAmount(next.control.total, currencyMinorUnits(batchCurrency)))
     setRefusal(null)
   }
   const discardRestored = async () => {
@@ -700,7 +705,7 @@ export function BatchBillEntry({
           {subsidiaries ? (
             <label className="space-y-1 text-xs font-medium text-slate-600 dark:text-slate-300">
               <span>{t('control.subsidiary')}</span>
-              <Select value={subsidiaryId} onChange={(event) => setSubsidiaryId(event.target.value)} className="w-56">
+              <Select value={subsidiaryId} aria-label={t('control.subsidiary')} disabled={rows.some((row) => !isBlankBatchRow(row))} title={t('control.entityLocked')} onChange={(event) => setSubsidiaryId(event.target.value)} className="w-56">
                 {subsidiaries.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
               </Select>
             </label>
@@ -727,7 +732,7 @@ export function BatchBillEntry({
           </label>
           <div className="min-w-0 flex-1 space-y-0.5 text-sm" aria-live="polite">
             <p className="font-medium text-slate-800 tabular-nums dark:text-slate-100">
-              {t('control.entered', { count: entered.count, total: taxComplete ? money(entered.total) : '—' })}
+              {t('control.entered', { count: entered.count, total: taxComplete ? money(entered.total) : '—' })} · {batchCurrency}
             </p>
             <p className="flex flex-wrap gap-x-4 text-xs tabular-nums">
               {variance.countInvalid ? (
@@ -770,7 +775,7 @@ export function BatchBillEntry({
           emptyRow={() => blankBatchRow()}
           getRowKey={(row) => row.key}
           cloneRow={cloneBatchRow}
-          minorUnits={minorUnits}
+          minorUnits={currencyMinorUnits(batchCurrency)}
           showKeyboardHint={false}
           addLabel={t('actions.addBill')}
           formatAmount={(value) => money(value)}

@@ -22,6 +22,7 @@
     "status": "Status"
   },
   "control": {
+    "entityLocked": "Choose the legal entity before entering bills. Clear the batch before changing its entity or currency.",
     "heading": "Control totals",
     "subsidiary": "Subsidiary",
     "count": "Number of bills",

@@ -22,6 +22,7 @@
     "status": "État"
   },
   "control": {
+    "entityLocked": "Choisissez l’entité juridique avant de saisir les factures. Videz le lot avant de changer son entité ou sa devise.",
     "heading": "Totaux de contrôle",
     "subsidiary": "Filiale",
     "count": "Nombre de factures",

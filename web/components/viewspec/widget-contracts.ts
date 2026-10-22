@@ -103,7 +103,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'banking-attention-list': { props: ['allClear', 'items'] },
   'banking-match': { props: ['countLabel', 'href', 'label', 'showCount', 'variant'] },
   'banking-roster': { props: ['accounts', 'layoutPrefs', 'totalCards', 'totalCash'] },
-  'batch-bill-entry': { props: ['accounts', 'canCreateVendor', 'canPost', 'defaultSubsidiaryId', 'helpHref', 'minorUnits', 'orgId', 'subsidiaries', 'taxProfiles', 'today', 'userId', 'vendors'] },
+  'batch-bill-entry': { props: ['accounts', 'canCreateVendor', 'canPost', 'currency', 'defaultSubsidiaryId', 'helpHref', 'minorUnits', 'orgId', 'subsidiaries', 'taxProfiles', 'today', 'userId', 'vendors'] },
   'billing-history-console': { props: [] },
   'blocked-bills': { props: ['empty', 'rows'] },
   'budget-drawer': { props: ['drawer'] },

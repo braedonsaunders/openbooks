@@ -194,6 +194,7 @@ export const COMMERCE_WIDGETS = {
       userId={str(props, 'userId') ?? ''}
       today={str(props, 'today') ?? ''}
       minorUnits={typeof props.minorUnits === 'number' ? props.minorUnits : 2}
+      currency={str(props, 'currency') ?? ''}
       vendors={(props.vendors as ComponentProps<typeof BatchBillEntry>['vendors']) ?? []}
       accounts={(props.accounts as ComponentProps<typeof BatchBillEntry>['accounts']) ?? []}
       taxProfiles={(props.taxProfiles as ComponentProps<typeof BatchBillEntry>['taxProfiles']) ?? []}

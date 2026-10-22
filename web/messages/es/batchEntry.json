@@ -22,6 +22,7 @@
     "status": "Estado"
   },
   "control": {
+    "entityLocked": "Elija la entidad jurídica antes de introducir facturas. Vacíe el lote antes de cambiar su entidad o moneda.",
     "heading": "Totales de control",
     "subsidiary": "Subsidiaria",
     "count": "Número de facturas",
