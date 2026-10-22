@@ -131,9 +131,16 @@ export function assertBaselineCatalogsEqual(expected, actual) {
   const sections = new Set([...Object.keys(expected), ...Object.keys(actual)]);
   const optionalUnavailable = expected.extensions?.some((row) => row.name === "pg_trgm")
     && !actual.extensions?.some((row) => row.name === "pg_trgm");
+  const cryptoUuidEquivalent = expected.extensions?.some((row) => row.name === "pgcrypto")
+    && actual.extensions?.some((row) => row.name === "pgcrypto");
   for (const section of sections) {
     const comparable = (rows) => section === "relations"
       ? rows?.map((row) => normalizeGeneratedQueryView(row, expected.openbooks_query_catalog_relations ?? []))
+      : section === "columns" && cryptoUuidEquivalent
+        // PostgreSQL's built-in and pgcrypto UUID generators both produce v4
+        // UUIDs. Their qualification differs with the creating search path.
+        ? rows?.map((row) => row.type === "uuid" && /^(?:pg_catalog\.)?gen_random_uuid\(\)$/.test(row.default ?? "")
+          ? { ...row, default: "gen_random_uuid()" } : row)
       : section === "schema_acl"
         ? rows?.filter((row) => !(row.grantee === "openbooks_read" && row.privilege_type === "USAGE" && !row.is_grantable
           && rows.some((grant) => grant.schema === row.schema && grant.grantee === "PUBLIC" && grant.privilege_type === "USAGE")))

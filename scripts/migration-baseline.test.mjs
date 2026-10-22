@@ -223,3 +223,15 @@ test("public schema usage covers a redundant read-role grant without admitting p
   assert.throws(() => assertBaselineCatalogsEqual({ schema_acl: [usage, read] }, { schema_acl: [read] }), /differs in schema_acl/);
   assert.throws(() => assertBaselineCatalogsEqual({ schema_acl: [usage] }, { schema_acl: [usage, { ...usage, privilege_type: "CREATE" }] }), /differs in schema_acl/);
 });
+
+
+test("vendor UUID v4 defaults compare independently of PostgreSQL search-path qualification", () => {
+  const extensions = [{ name: "pgcrypto", version: "1.3" }];
+  const column = { schema: "public", relation: "obligations", name: "id", type: "uuid", not_null: true, default: "gen_random_uuid()" };
+  const expected = { extensions, columns: [column] };
+  assert.doesNotThrow(() => assertBaselineCatalogsEqual(expected, { extensions, columns: [{ ...column, default: "pg_catalog.gen_random_uuid()" }] }));
+  for (const change of [{ default: "custom.gen_random_uuid()" }, { default: "uuid_generate_v7()" }, { default: "pg_catalog.gen_random_uuid()", not_null: false }]) {
+    assert.throws(() => assertBaselineCatalogsEqual(expected, { extensions, columns: [{ ...column, ...change }] }), /differs in columns/);
+  }
+  assert.throws(() => assertBaselineCatalogsEqual({ columns: [column] }, { columns: [{ ...column, default: "pg_catalog.gen_random_uuid()" }] }), /differs in columns/);
+});
