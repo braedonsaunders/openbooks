@@ -4,6 +4,7 @@
  * disabled live guard refuses retirement.
  */
 export const TENANT_RETIREMENT_GUARDS = [
+  { name: "source_retired_time_guard", sha256: "099bccbab84f82ad200433a9484f655fee59351aa158afdaa69eae2650ed0578" },
   { name: "depreciation_source_authority_guard", sha256: "63fdeb6a8c7461daabb24fb344e4b2b246700cbceb3baf581698f7a6bbc54d80" },
   { name: "calibration_entry_published_guard", sha256: "a8d128e484d16f9f16a462afef52b325e2b541bbdf8a000162f7358daf0225f4" },
   { name: "subcontract_change_pending_terms_guard", sha256: "442fa77c5ad1297680bbc4e6f02b434af0b8f8fb9b1c43909aff970ad866f145" },
@@ -286,6 +287,7 @@ export const TENANT_RETIREMENT_GUARDS = [
 ] as const;
 
 export const TENANT_RETIREMENT_GUARD_ATTRIBUTES = [
+  { name: "source_retired_time_guard", config: ["search_path=public,pg_catalog"] },
   { name: "depreciation_source_authority_guard", config: ["search_path=public,pg_catalog"] },
   {name:"calibration_entry_published_guard",config:["search_path=public,pg_catalog"]},
   {
@@ -1399,6 +1401,7 @@ export const TENANT_RETIREMENT_GUARD_ATTRIBUTES = [
 ] as const;
 
 export const TENANT_RETIREMENT_TRIGGER_CONTRACTS = [
+  { table: "time_entries", trigger: "source_retired_time_evidence", function: "source_retired_time_guard" },
   { table: "depreciation_schedule_lines", trigger: "depreciation_source_authority_guard", function: "depreciation_source_authority_guard" },
   { table: "hrm_leave_payroll_entitlement_mappings", trigger: "hrm_leave_payroll_entitlement_mappings_immutable", function: "financial_policy_version_immutable" },
   {table:"hrm_calibration_entries",trigger:"calibration_entry_published_guard",function:"calibration_entry_published_guard"},
