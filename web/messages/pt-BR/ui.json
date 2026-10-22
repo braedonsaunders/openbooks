@@ -42,7 +42,11 @@
     "scanUnavailable": "O registro lido não está disponível para esta linha.",
     "scanNetworkError": "Não foi possível resolver a leitura. Verifique a conexão e tente novamente.",
     "scanNotFound": "Nenhum registro corresponde exatamente a esta leitura. Confira o valor ou escolha um registro na lista.",
-    "scanAmbiguous": "Esta leitura corresponde a vários registros. Escolha o registro correto entre os candidatos."
+    "scanAmbiguous": "Esta leitura corresponde a vários registros. Escolha o registro correto entre os candidatos.",
+    "recent": "Recentes",
+    "allOptions": "Todos",
+    "create": "Criar “{query}”",
+    "createFailed": "Não foi possível criar."
   },
   "sparkline": {
     "noTrend": "Sem dados de tendência",
@@ -103,7 +107,7 @@
     "selectAll": "Selecionar todas as linhas",
     "selectRow": "Selecionar linha {row}",
     "addLine": "Adicionar linha",
-    "keyboardHint": "Enter adiciona/desce · Alt+↑/↓ reordena · ⌘D duplica · ⌘⌫ remove",
+    "keyboardHint": "Enter próxima linha · Tab após o fim adiciona uma linha · F8 copia de cima · Alt+Enter insere · ⌘D duplica · ⌘⌫ remove · cole linhas de uma planilha",
     "lineActionsAria": "Ações da linha {number}",
     "insertAbove": "Inserir acima",
     "insertBelow": "Inserir abaixo",
@@ -116,6 +120,14 @@
       "computedOverriddenTitle": "Calculado {amount} · substituído",
       "resetAria": "Redefinir imposto para o calculado",
       "resetTitle": "Redefinir para o calculado {amount}"
-    }
+    },
+    "keyboardHintEnterAdvances": "Enter próximo campo · Shift+Enter linha anterior · F8 copia de cima · Alt+Enter insere · ⌘D duplica · ⌘⌫ remove · cole linhas de uma planilha",
+    "paste": {
+      "done": "{count, plural, one {# linha colada} other {# linhas coladas}}.",
+      "unmatched": "{count, plural, one {# valor colado precisa} other {# valores colados precisam}} de atenção — as células sinalizadas mostram o que foi colado.",
+      "unmatchedCell": "O valor colado “{value}” não corresponde a nenhuma opção ou valor aqui"
+    },
+    "moreColumns": "Mostrar todas as colunas",
+    "fewerColumns": "Mostrar menos colunas"
   }
 }

@@ -42,7 +42,11 @@
     "scanUnavailable": "El registro escaneado no está disponible para esta línea.",
     "scanNetworkError": "No se pudo resolver el escaneo. Comprueba la conexión e inténtalo de nuevo.",
     "scanNotFound": "No hay ningún registro que coincida exactamente con este escaneo. Comprueba el valor o elige un registro de la lista.",
-    "scanAmbiguous": "Este escaneo coincide con varios registros. Elige el registro deseado entre los candidatos."
+    "scanAmbiguous": "Este escaneo coincide con varios registros. Elige el registro deseado entre los candidatos.",
+    "recent": "Recientes",
+    "allOptions": "Todos",
+    "create": "Crear «{query}»",
+    "createFailed": "No se pudo crear."
   },
   "sparkline": {
     "noTrend": "Sin datos de tendencia",
@@ -103,7 +107,7 @@
     "selectAll": "Seleccionar todas las filas",
     "selectRow": "Seleccionar fila {row}",
     "addLine": "Agregar línea",
-    "keyboardHint": "Enter agrega/baja · Alt+↑/↓ reordena · ⌘D duplica · ⌘⌫ elimina",
+    "keyboardHint": "Enter línea siguiente · Tab al final agrega una línea · F8 copia desde arriba · Alt+Enter inserta · ⌘D duplica · ⌘⌫ elimina · pegue filas desde una hoja de cálculo",
     "lineActionsAria": "Acciones de la línea {number}",
     "insertAbove": "Insertar arriba",
     "insertBelow": "Insertar abajo",
@@ -116,6 +120,14 @@
       "computedOverriddenTitle": "Calculado {amount} · modificado manualmente",
       "resetAria": "Restablecer el impuesto al valor calculado",
       "resetTitle": "Restablecer al valor calculado {amount}"
-    }
+    },
+    "keyboardHintEnterAdvances": "Enter campo siguiente · Shift+Enter línea anterior · F8 copia desde arriba · Alt+Enter inserta · ⌘D duplica · ⌘⌫ elimina · pegue filas desde una hoja de cálculo",
+    "paste": {
+      "done": "{count, plural, one {# fila pegada} other {# filas pegadas}}.",
+      "unmatched": "{count, plural, one {# valor pegado requiere} other {# valores pegados requieren}} atención — las celdas marcadas muestran lo que se pegó.",
+      "unmatchedCell": "El valor pegado «{value}» no coincide aquí con ninguna opción ni importe"
+    },
+    "moreColumns": "Mostrar todas las columnas",
+    "fewerColumns": "Mostrar menos columnas"
   }
 }

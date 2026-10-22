@@ -42,7 +42,11 @@
     "scanUnavailable": "スキャンしたレコードはこの明細で選択できません。",
     "scanNetworkError": "スキャンを照合できませんでした。接続を確認してもう一度お試しください。",
     "scanNotFound": "このスキャンに完全一致するレコードがありません。値を確認するか、一覧からレコードを選択してください。",
-    "scanAmbiguous": "このスキャンは複数のレコードに一致します。候補から対象のレコードを選択してください。"
+    "scanAmbiguous": "このスキャンは複数のレコードに一致します。候補から対象のレコードを選択してください。",
+    "recent": "最近",
+    "allOptions": "すべて",
+    "create": "「{query}」を作成",
+    "createFailed": "作成できませんでした。"
   },
   "sparkline": {
     "noTrend": "トレンドデータがありません",
@@ -103,7 +107,7 @@
     "selectAll": "すべての行を選択",
     "selectRow": "行 {row} を選択",
     "addLine": "行を追加",
-    "keyboardHint": "Enter で追加/下へ移動 · Alt+↑/↓ で並べ替え · ⌘D で複製 · ⌘⌫ で削除",
+    "keyboardHint": "Enter で次の行 · 末尾で Tab を押すと行を追加 · F8 で上の行からコピー · Alt+Enter で挿入 · ⌘D で複製 · ⌘⌫ で削除 · スプレッドシートから行を貼り付け可能",
     "lineActionsAria": "行 {number} のアクション",
     "insertAbove": "上に挿入",
     "insertBelow": "下に挿入",
@@ -116,6 +120,14 @@
       "computedOverriddenTitle": "計算値 {amount} · 上書き済み",
       "resetAria": "税額を計算値にリセット",
       "resetTitle": "計算値 {amount} にリセット"
-    }
+    },
+    "keyboardHintEnterAdvances": "Enter で次の項目 · Shift+Enter で前の行 · F8 で上の行からコピー · Alt+Enter で挿入 · ⌘D で複製 · ⌘⌫ で削除 · スプレッドシートから行を貼り付け可能",
+    "paste": {
+      "done": "{count, plural, one {# 行を貼り付けました} other {# 行を貼り付けました}}。",
+      "unmatched": "{count, plural, one {貼り付けた値 # 件} other {貼り付けた値 # 件}}の確認が必要です — マークされたセルに貼り付けた内容が表示されています。",
+      "unmatchedCell": "貼り付けた「{value}」は、ここでの選択肢または金額と一致しませんでした"
+    },
+    "moreColumns": "すべての列を表示",
+    "fewerColumns": "表示する列を減らす"
   }
 }

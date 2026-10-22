@@ -42,7 +42,11 @@
     "scanUnavailable": "扫描的记录不是此行的可用选项。",
     "scanNetworkError": "无法解析扫描内容。请检查连接后重试。",
     "scanNotFound": "没有记录与此扫描值完全匹配。请检查该值或从列表中选择记录。",
-    "scanAmbiguous": "此扫描值匹配多个记录。请从候选项中选择要使用的记录。"
+    "scanAmbiguous": "此扫描值匹配多个记录。请从候选项中选择要使用的记录。",
+    "recent": "最近",
+    "allOptions": "全部",
+    "create": "创建“{query}”",
+    "createFailed": "无法创建。"
   },
   "sparkline": {
     "noTrend": "无趋势数据",
@@ -103,7 +107,7 @@
     "selectAll": "全选",
     "selectRow": "选择第 {row} 行",
     "addLine": "添加行",
-    "keyboardHint": "Enter 添加/下移 · Alt+↑/↓ 重排 · ⌘D 复制 · ⌘⌫ 移除",
+    "keyboardHint": "Enter 下一行 · 在末尾按 Tab 添加一行 · F8 复制上一行 · Alt+Enter 插入 · ⌘D 复制行 · ⌘⌫ 移除 · 可从电子表格粘贴行",
     "lineActionsAria": "第 {number} 行操作",
     "insertAbove": "在上方插入",
     "insertBelow": "在下方插入",
@@ -116,6 +120,14 @@
       "computedOverriddenTitle": "计算值 {amount} · 已覆盖",
       "resetAria": "将税额重置为计算值",
       "resetTitle": "重置为计算值 {amount}"
-    }
+    },
+    "keyboardHintEnterAdvances": "Enter 下一字段 · Shift+Enter 上一行 · F8 复制上一行 · Alt+Enter 插入 · ⌘D 复制行 · ⌘⌫ 移除 · 可从电子表格粘贴行",
+    "paste": {
+      "done": "{count, plural, one {已粘贴 # 行} other {已粘贴 # 行}}。",
+      "unmatched": "{count, plural, one {# 个粘贴值} other {# 个粘贴值}}需要处理 — 已标记的单元格显示了粘贴的内容。",
+      "unmatchedCell": "粘贴的“{value}”与此处的选项或金额不匹配"
+    },
+    "moreColumns": "显示所有列",
+    "fewerColumns": "显示较少列"
   }
 }

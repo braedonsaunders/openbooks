@@ -8,7 +8,7 @@
     "title": "請求書のメール送信先",
     "copyAddress": "{label} のアドレスをコピー",
     "copyWebhook": "{label} の Webhook URL をコピー",
-    "webhook": "Webhook URL",
+    "webhook": "ウェブフック URL",
     "copied": "クリップボードにコピーしました",
     "copyFailed": "コピーできませんでした。テキストを選択して手動でコピーしてください。",
     "none": "有効な受信アドレスはまだありません。",

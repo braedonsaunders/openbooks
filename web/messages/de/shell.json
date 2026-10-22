@@ -29,7 +29,8 @@
     "manageEnvironments": "Umgebungen verwalten",
     "keyboardShortcuts": "Tastenkürzel",
     "switchFailed": "Der Arbeitsbereich konnte nicht gewechselt werden. Versuchen Sie es erneut.",
-    "switchUnavailable": "Sie haben keinen Zugriff mehr auf diesen Arbeitsbereich."
+    "switchUnavailable": "Sie haben keinen Zugriff mehr auf diesen Arbeitsbereich.",
+    "dataEntry": "Datenerfassung"
   },
   "sandboxBanner": {
     "sandbox": "Sandbox-Umgebung",
@@ -84,6 +85,7 @@
       "salesOrder": "Kundenauftrag",
       "customerPayment": "Kundenzahlung",
       "bill": "Eingangsrechnung",
+      "billBatch": "Mehrere Eingangsrechnungen (Stapelerfassung)",
       "vendorCredit": "Lieferantengutschrift",
       "purchaseOrder": "Bestellung",
       "vendorPayment": "Lieferantenzahlung",
@@ -139,8 +141,11 @@
       "dashboards": "Dashboards",
       "locations": "Standorte",
       "warehouses": "Lager",
-      "workOrders": "Fertigungsaufträge"
-    }
+      "workOrders": "Fertigungsaufträge",
+      "actions": "Aktionen"
+    },
+    "createAction": "Anlegen: {name}",
+    "createVerbs": "new create add enter make neu neue neuer neues anlegen erstellen hinzufügen erfassen"
   },
   "meta": {
     "description": "Die offene Business-Suite. Betrieben mit offenen Büchern."
@@ -288,7 +293,11 @@
       "save": "Speichern",
       "saveAndNew": "Speichern und neu",
       "saveAndClose": "Speichern und schließen",
-      "addLine": "Zeile hinzufügen"
+      "addLine": "Zeile hinzufügen",
+      "fieldHelp": "Aktives Feld erklären",
+      "postAndNew": "Buchen und neu",
+      "postRecord": "Speichern und buchen",
+      "recallLast": "Zeilen des letzten Belegs übernehmen"
     }
   },
   "dateEntry": {

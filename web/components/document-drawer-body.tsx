@@ -15,18 +15,10 @@ import { lineText, type LineRow } from './document-drawer-types'
 import { emptyLine } from './document-drawer-lines'
 import type { DocumentDrawerHeaderScope } from './document-drawer-header'
 import { DateField } from './date-field'
+import { currencyMinorUnits } from '../lib/iso-currencies'
 import { CONTROL_ACCOUNT_DETAIL, entryHeaderLayout } from './document-drawer-entry'
 import { RecallShortcut } from './document-drawer-recall-shortcut'
 import { STATUS_KEYS } from './document-drawer-title'
-
-/** Decimal places the currency is entered in (2 for USD, 0 for JPY, 3 for KWD). */
-function currencyMinorUnits(currency: unknown): number {
-  try {
-    return new Intl.NumberFormat('en', { style: 'currency', currency: String(currency || 'USD') }).resolvedOptions().maximumFractionDigits ?? 2
-  } catch {
-    return 2
-  }
-}
 
 /** The record body: refusals, banners, header fields, and the line grid. */
 export function renderDocumentDrawerBody(scope: DocumentDrawerHeaderScope) {
@@ -493,7 +485,7 @@ export function renderDocumentDrawerBody(scope: DocumentDrawerHeaderScope) {
             readOnly={!editable || config.kind === 'project_charge'}
             formatAmount={(value) => money(value, { currency: doc.currency })}
             distribution={distribution}
-            minorUnits={currencyMinorUnits(doc.currency)}
+            minorUnits={currencyMinorUnits(String(doc.currency ?? ''))}
           />
           {editable && partyDefaultHint ? (
             <p className="text-[11px] text-slate-500 dark:text-slate-400">{partyDefaultHint}</p>

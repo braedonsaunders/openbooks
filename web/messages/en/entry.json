@@ -87,8 +87,10 @@
     "pickerType": "Type to search a list (names and codes)",
     "pickerTab": "Accept the highlighted match and move on",
     "pickerOpen": "Open the list",
-    "amountMath": "Arithmetic in amounts (200+47.83)",
-    "fieldHelp": "Explain the focused field"
+    "pickerClose": "Close a list and keep the value",
+    "pickerCreate": "Create the vendor or customer you typed",
+    "pickerClear": "Clear an optional list field",
+    "amountMath": "Arithmetic in amounts (200+47.83)"
   },
   "bulk": {
     "selectAll": "Select all on this page",

@@ -1,93 +1,117 @@
 {
-  "moreDetails": "More details",
-  "noPaymentTermsVendor": "No payment terms on {name} — set terms on the vendor or a company default",
+  "moreDetails": "詳細を表示",
+  "noPaymentTermsVendor": "{name} に支払条件がありません — 仕入先に支払条件を設定するか、会社の既定値を設定してください",
   "partyDefault": {
-    "configured": "New lines use {account}, the default account for {party}.",
-    "history": "New lines use {account}, used on {count, plural, one {# recent document} other {# recent documents}} from {party}."
+    "configured": "新しい明細行には {party} の既定勘定である {account} が使用されます。",
+    "history": "新しい明細行には {account} が使用されます。{party} の{count, plural, one {最近の伝票 # 件} other {最近の伝票 # 件}}で使用された勘定です。"
   },
   "controlTotal": {
-    "label": "Control total",
-    "help": "Type the total printed on the vendor's document. Saving waits until the lines add up to it.",
-    "off": "Off by {difference}",
-    "mismatch": "The lines don't add up to the control total yet: they are off by {difference}. Correct a line, or clear the control total.",
-    "invalid": "The control total isn't an amount. Type a number such as 1250.00, or clear it."
+    "label": "照合合計",
+    "help": "仕入先の書類に印字された合計を入力してください。明細行の合計がこの金額と一致するまで保存されません。",
+    "off": "差額 {difference}",
+    "mismatch": "明細行の合計がまだ照合合計と一致しません。差額は {difference} です。明細行を修正するか、照合合計をクリアしてください。",
+    "invalid": "照合合計が金額ではありません。1250.00 のような数値を入力するか、クリアしてください。"
   },
   "postAfterSave": {
-    "posted": "{number} saved and posted",
-    "pending": "{number} saved and submitted for approval"
+    "posted": "{number} を保存して転記しました",
+    "pending": "{number} を保存して承認に提出しました"
   },
   "buttons": {
-    "saveDraft": "Save draft",
-    "saveHint": "Save as a draft (⌘S / Ctrl+S)",
-    "saveAndNew": "Save & new",
-    "saveAndNewHint": "Save and start the next one (⌃⌥S / Ctrl+Alt+S)",
-    "postAndNew": "Post & new",
-    "postAndNewHint": "Save, post and start the next one (⌘↵ / Ctrl+Enter)",
-    "post": "Post",
-    "postHint": "Save and post (⌘⇧↵ / Ctrl+Shift+Enter)"
+    "saveDraft": "下書きを保存",
+    "saveHint": "下書きとして保存します (⌘S / Ctrl+S)",
+    "saveAndNew": "保存して新規",
+    "saveAndNewHint": "保存して次の伝票を開始します (⌃⌥S / Ctrl+Alt+S)",
+    "postAndNew": "転記して新規",
+    "postAndNewHint": "保存・転記して次の伝票を開始します (⌘↵ / Ctrl+Enter)",
+    "post": "転記",
+    "postHint": "保存して転記します (⌘⇧↵ / Ctrl+Shift+Enter)"
   },
   "createParty": {
-    "vendor": "Create vendor “{name}”",
-    "customer": "Create customer “{name}”",
-    "failed": "The party could not be created."
+    "vendor": "仕入先「{name}」を作成",
+    "customer": "得意先「{name}」を作成",
+    "failed": "取引先を作成できませんでした。"
   },
   "duplicate": {
-    "title": "This vendor already has a bill with this invoice number",
+    "title": "この仕入先には、この請求書番号の仕入請求書がすでにあります",
     "match": "{number} · {date} · {total} · {status}"
   },
   "recall": {
-    "offer": "Last from this party: {number} · {date} · {total} · {lines, plural, one {# line} other {# lines}}",
-    "use": "Use its lines",
-    "shortcut": "Use the last document's lines",
-    "shortcutHint": "Fill the lines from this party's last document (⌃⌥L / Ctrl+Alt+L)",
-    "applied": "Lines filled from {number}. Change anything that differs.",
-    "undo": "Undo"
+    "offer": "この取引先の前回の伝票: {number} · {date} · {total} · {lines, plural, one {# 行} other {# 行}}",
+    "use": "この明細を使用",
+    "shortcut": "前回の伝票の明細を使用",
+    "shortcutHint": "この取引先の前回の伝票から明細を入力します (⌃⌥L / Ctrl+Alt+L)",
+    "applied": "{number} から明細を入力しました。異なる箇所を変更してください。",
+    "undo": "元に戻す"
   },
   "preferences": {
-    "saveFailed": "The preference could not be saved. Try again.",
+    "saveFailed": "設定を保存できませんでした。もう一度お試しください。",
     "enterMovesToNextField": {
-      "label": "Enter moves to the next field",
-      "help": "Enter walks across a line and on to the next one, as in desktop accounting systems. Off: Enter moves down the column."
+      "label": "Enter で次の項目へ移動",
+      "help": "デスクトップ会計ソフトと同様に、Enter で明細行の項目を順に移動し、次の行へ進みます。オフの場合、Enter で列の下へ移動します。"
     },
     "autoDecimal": {
-      "label": "Place the decimal point automatically",
-      "help": "Type 1785 to enter 17.85 in amount fields — for ten-key entry. Typing a decimal point still works as usual."
+      "label": "小数点を自動で挿入",
+      "help": "金額欄で 1785 と入力すると 17.85 になります（テンキー入力向け）。小数点を入力した場合も通常どおり機能します。"
     },
     "keepDateOnNew": {
-      "label": "Keep the date on Save & new",
-      "help": "The next document starts with the date you just used."
+      "label": "保存して新規でも日付を保持",
+      "help": "次の伝票は直前に使用した日付で始まります。"
     },
     "keepPartyOnNew": {
-      "label": "Keep the vendor or customer on Save & new",
-      "help": "For entering several documents from the same party."
+      "label": "保存して新規でも仕入先・得意先を保持",
+      "help": "同じ取引先の伝票を続けて入力する場合に使用します。"
     },
     "recallLastDocument": {
-      "label": "When you pick a vendor or customer",
-      "help": "Their most recent document of the same kind can fill the lines for you.",
-      "suggest": "Offer their last lines",
-      "apply": "Fill from their last document",
-      "off": "Don't recall"
+      "label": "仕入先または得意先を選択したとき",
+      "help": "同じ種類の直近の伝票から明細を入力できます。",
+      "suggest": "前回の明細を提案",
+      "apply": "前回の伝票から入力",
+      "off": "呼び出さない"
     }
   },
   "keys": {
-    "title": "Lines, lists and amounts",
-    "preferencesTitle": "Data entry preferences",
-    "gridEnter": "Next line (or next field, by preference)",
-    "gridShiftEnter": "Previous line",
-    "gridArrows": "Move between lines",
-    "gridTab": "Next field; past the last field, a new line",
-    "gridInsertBelow": "Insert a line below",
-    "gridInsertAbove": "Insert a line above",
-    "gridCopyAbove": "Copy the field from the line above",
-    "gridDuplicate": "Duplicate the line",
-    "gridRemove": "Remove the line",
-    "gridMove": "Move the line up or down",
-    "gridMenu": "Line menu",
-    "gridPaste": "Paste rows copied from a spreadsheet",
-    "pickerType": "Type to search a list (names and codes)",
-    "pickerTab": "Accept the highlighted match and move on",
-    "pickerOpen": "Open the list",
-    "amountMath": "Arithmetic in amounts (200+47.83)",
-    "fieldHelp": "Explain the focused field"
+    "title": "明細行・一覧・金額",
+    "preferencesTitle": "データ入力の設定",
+    "gridEnter": "次の行（設定により次の項目）",
+    "gridShiftEnter": "前の行",
+    "gridArrows": "行間を移動",
+    "gridTab": "次の項目。最後の項目の後は新しい行",
+    "gridInsertBelow": "下に行を挿入",
+    "gridInsertAbove": "上に行を挿入",
+    "gridCopyAbove": "上の行の項目をコピー",
+    "gridDuplicate": "行を複製",
+    "gridRemove": "行を削除",
+    "gridMove": "行を上下に移動",
+    "gridMenu": "行メニュー",
+    "gridPaste": "スプレッドシートからコピーした行を貼り付け",
+    "pickerType": "入力して一覧を検索（名前とコード）",
+    "pickerTab": "強調表示された候補を確定して次へ",
+    "pickerOpen": "一覧を開く",
+    "pickerClose": "リストを閉じて値を保持します",
+    "pickerCreate": "入力した仕入先または得意先を作成します",
+    "pickerClear": "任意のリスト項目をクリアします",
+    "amountMath": "金額欄での計算 (200+47.83)"
+  },
+  "bulk": {
+    "selectAll": "このページをすべて選択",
+    "selectRow": "{number} を選択",
+    "selected": "{count, plural, one {# 件選択中} other {# 件選択中}}",
+    "post": "{count, plural, one {# 件の伝票} other {# 件の伝票}}を転記",
+    "submit": "{count, plural, one {# 件の下書き} other {# 件の下書き}}を提出",
+    "clear": "クリア",
+    "dismiss": "閉じる",
+    "running": "処理中… {total} 件中 {done} 件",
+    "summary": "転記 {posted} 件 · 承認依頼 {pending} 件 · 拒否 {refused} 件",
+    "refusedFallback": "伝票を処理できませんでした。",
+    "confirmPostTitle": "{count, plural, one {# 件の伝票} other {# 件の伝票}}を転記しますか？",
+    "confirmPostBody": "各伝票は必要に応じて提出され、それぞれのチェックを経て転記されます。承認ワークフローが適用される伝票は、代わりに承認に回されます。拒否された伝票は理由とともに選択されたままになります。",
+    "confirmSubmitTitle": "{count, plural, one {# 件の下書き} other {# 件の下書き}}を提出しますか？",
+    "confirmSubmitBody": "各下書きはそれぞれのチェックを経て提出されます。承認ワークフローが適用されない下書きは承認済みとなり、転記できる状態になります。",
+    "keys": {
+      "next": "次の行",
+      "previous": "前の行",
+      "toggle": "行を選択または選択解除",
+      "extend": "選択範囲を拡張"
+    }
   }
 }

@@ -146,30 +146,21 @@ export function useDocumentDrawerEntry(scope: DocumentDrawerPickersScope) {
   const itemIds = useMemo(() => new Set((items ?? []).map((item) => item.id)), [items])
 
   // -- party defaults and recall ------------------------------------------
-  const [partyLine, setPartyLine] = useState<PartyLineDefault | null>(null)
-  const [recent, setRecent] = useState<RecentPartyDocument | null>(null)
-  const [recall, setRecall] = useState<{ documentNumber: string | null; undo: { rows: LineRow[]; memo: string } } | null>(null)
-  const recallOffered = useRef<string | null>(null)
+  // Answers are kept with the party they were asked for, so a slow answer
+  // for the previous vendor is never applied to the current one.
+  const partyKey = editable && lineSide && partyId ? partyId : null
+  const [partyAnswer, setPartyAnswer] = useState<{ partyId: string; line: PartyLineDefault | null; recent: RecentPartyDocument | null } | null>(null)
+  const current = partyAnswer && partyAnswer.partyId === partyKey ? partyAnswer : null
+  const partyLine = current?.line ?? null
+  const recent = current?.recent ?? null
+  const [recallState, setRecall] = useState<{ key: string; documentNumber: string | null; undo: { rows: LineRow[]; memo: string } } | null>(null)
+  const recallKey = recent ? `${partyId}:${recent.id}` : null
+  const recall = recallState && recallState.key === recallKey ? recallState : null
+  // The latest rows and memo, for recall applied when an answer arrives.
+  const latest = useRef({ rows, memo })
   useEffect(() => {
-    setPartyLine(null)
-    setRecent(null)
-    if (!editable || !lineSide || !partyId) return
-    let live = true
-    const query = new URLSearchParams({ kind: config.kind, partyId, include: 'party' })
-    fetch(`/api/documents/defaults?${query.toString()}`, { headers: { accept: 'application/json' } })
-      .then(async (response) => (response.ok ? response.json() : null))
-      .then((body: { party?: { line?: PartyLineDefault | null; recent?: RecentPartyDocument | null } | null } | null) => {
-        if (!live) return
-        setPartyLine(body?.party?.line ?? null)
-        setRecent(body?.party?.recent ?? null)
-      })
-      // Defaults are a convenience: an unavailable lookup leaves lines blank
-      // for the clerk to code, and the save validates them as always.
-      .catch(() => undefined)
-    return () => {
-      live = false
-    }
-  }, [config.kind, editable, lineSide, partyId])
+    latest.current = { rows, memo }
+  }, [rows, memo])
 
   const defaultAccount = partyLine?.accountId && accountIds.has(partyLine.accountId) ? partyLine.accountId : ''
   const defaultTax = config.hasTax && partyLine?.taxCodeId && taxValues.has(`code:${partyLine.taxCodeId}`) ? `code:${partyLine.taxCodeId}` : ''
@@ -213,7 +204,6 @@ export function useDocumentDrawerEntry(scope: DocumentDrawerPickersScope) {
     if (changed) setRows(next)
   }, [rows, partyLine, partyId, editable, lineSide, config.kind, config.hasTax, defaultAccount, defaultTax, setRows])
 
-  const linesAreBlank = rows.every((row) => isBlankDrawerLine(row))
   const recentToRows = useCallback((source: RecentPartyDocument): LineRow[] => {
     const lines = source.lines.map((line) => ({
       ...emptyLine(),
@@ -234,15 +224,17 @@ export function useDocumentDrawerEntry(scope: DocumentDrawerPickersScope) {
     return lines.length > 0 ? lines : [emptyLine()]
   }, [accountIds, itemIds, taxValues, config.hasTax])
 
-  const applyRecall = useCallback(() => {
-    if (!recent) return
-    const undo = { rows, memo }
-    const next = recentToRows(recent)
+  const recallFrom = useCallback((source: RecentPartyDocument, forParty: string) => {
+    const undo = { ...latest.current }
+    const next = recentToRows(source)
     for (const row of next) applied.current.set(row.clientKey, { accountId: row.accountId, taxProfileId: row.taxProfileId })
     setRows(next)
-    if (!memo && recent.memo) setMemo(recent.memo)
-    setRecall({ documentNumber: recent.documentNumber, undo })
-  }, [recent, rows, memo, recentToRows, setRows, setMemo])
+    if (!undo.memo && source.memo) setMemo(source.memo)
+    setRecall({ key: `${forParty}:${source.id}`, documentNumber: source.documentNumber, undo })
+  }, [recentToRows, setRows, setMemo])
+  const applyRecall = useCallback(() => {
+    if (recent) recallFrom(recent, partyId)
+  }, [recent, partyId, recallFrom])
 
   const undoRecall = useCallback(() => {
     if (!recall) return
@@ -251,27 +243,40 @@ export function useDocumentDrawerEntry(scope: DocumentDrawerPickersScope) {
     setRecall(null)
   }, [recall, setRows, setMemo])
 
-  // "Apply" recalls automatically on a new document whose lines are still
-  // empty, once per party; "suggest" offers the same as a one-key action.
+  // "Apply" recalls automatically when the party's answer arrives on a new
+  // document whose lines are still empty; "suggest" offers the same as a
+  // one-key action.
+  const autoRecall = isCreate && preferences.recallLastDocument === 'apply'
   useEffect(() => {
-    if (!recent || !isCreate || !editable) return
-    if (recallOffered.current === `${partyId}:${recent.id}`) return
-    recallOffered.current = `${partyId}:${recent.id}`
-    setRecall(null)
-    if (preferences.recallLastDocument === 'apply' && linesAreBlank) applyRecall()
-  }, [recent, isCreate, editable, partyId, preferences.recallLastDocument, linesAreBlank, applyRecall])
+    if (!partyKey) return
+    let live = true
+    const query = new URLSearchParams({ kind: config.kind, partyId: partyKey, include: 'party' })
+    fetch(`/api/documents/defaults?${query.toString()}`, { headers: { accept: 'application/json' } })
+      .then(async (response) => (response.ok ? response.json() : null))
+      .then((body: { party?: { line?: PartyLineDefault | null; recent?: RecentPartyDocument | null } | null } | null) => {
+        if (!live) return
+        const answer = { partyId: partyKey, line: body?.party?.line ?? null, recent: body?.party?.recent ?? null }
+        setPartyAnswer(answer)
+        if (autoRecall && answer.recent && latest.current.rows.every((row) => isBlankDrawerLine(row))) recallFrom(answer.recent, partyKey)
+      })
+      // Defaults are a convenience: an unavailable lookup leaves lines blank
+      // for the clerk to code, and the save validates them as always.
+      .catch(() => undefined)
+    return () => {
+      live = false
+    }
+  }, [config.kind, partyKey, autoRecall, recallFrom])
 
   const recallAvailable = Boolean(recent) && editable && preferences.recallLastDocument !== 'off' && recall === null
 
   // -- live duplicate reference --------------------------------------------
   const referenceKinds = config.kind === 'vendor_bill' || config.kind === 'vendor_credit'
-  const [duplicates, setDuplicates] = useState<DuplicateMatch[]>([])
   const trimmedReference = referenceNumber.trim()
+  const duplicateKey = editable && referenceKinds && partyId && trimmedReference ? `${partyId}|${trimmedReference}` : null
+  const [duplicateAnswer, setDuplicateAnswer] = useState<{ key: string; matches: DuplicateMatch[] } | null>(null)
+  const duplicates = duplicateAnswer && duplicateAnswer.key === duplicateKey ? duplicateAnswer.matches : []
   useEffect(() => {
-    if (!editable || !referenceKinds || !partyId || !trimmedReference) {
-      setDuplicates([])
-      return
-    }
+    if (!duplicateKey) return
     let live = true
     const timer = window.setTimeout(() => {
       const query = new URLSearchParams({ kind: config.kind, partyId, referenceNumber: trimmedReference })
@@ -279,7 +284,7 @@ export function useDocumentDrawerEntry(scope: DocumentDrawerPickersScope) {
       fetch(`/api/documents/duplicates?${query.toString()}`, { headers: { accept: 'application/json' } })
         .then(async (response) => (response.ok ? response.json() : null))
         .then((body: { duplicates?: DuplicateMatch[] } | null) => {
-          if (live) setDuplicates(Array.isArray(body?.duplicates) ? body.duplicates.filter((match) => match.reason === 'reference') : [])
+          if (live) setDuplicateAnswer({ key: duplicateKey, matches: Array.isArray(body?.duplicates) ? body.duplicates.filter((match) => match.reason === 'reference') : [] })
         })
         // The save-time check still runs; a failed probe only hides the banner.
         .catch(() => undefined)
@@ -288,7 +293,7 @@ export function useDocumentDrawerEntry(scope: DocumentDrawerPickersScope) {
       live = false
       window.clearTimeout(timer)
     }
-  }, [editable, referenceKinds, partyId, trimmedReference, config.kind, isCreate, doc.id])
+  }, [duplicateKey, partyId, trimmedReference, config.kind, isCreate, doc.id])
 
   // -- Save & new carry ---------------------------------------------------
   const carryLoaded = useRef(false)

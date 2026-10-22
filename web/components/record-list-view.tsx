@@ -5,7 +5,7 @@ import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
-import { Badge, EmptyState, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
+import { Badge, EmptyState, PageHeader, TableCell, TableHead } from '@openbooks/ui'
 import { getRecordType, listColumnMeta, recordTypeFeatureKey } from '@openbooks/customization'
 import { SearchInput } from './search-input'
 import { FilterChips, MultiSelectFilter, SearchSelectFilter } from './filter-bar'
@@ -30,6 +30,14 @@ import { listDrawerRoute, type NativeListDrawerData } from '../lib/list/drawer-r
 import { resolveListStatusFilter, selectedListStatuses } from '../lib/list-status-filter'
 import { can, resolveAuthzByUserId } from '../lib/authz-core'
 import { FeatureUnavailable } from './feature-unavailable'
+import { createPermission, postPermission } from '../lib/document-kinds'
+import { RecordListBulkTable, type BulkListActions } from './record-list-bulk'
+
+/**
+ * Lists whose documents run the shared submit/post commands, and so offer
+ * keyboard row selection with bulk Post and Submit.
+ */
+const BULK_LIFECYCLE_RECORD_TYPES = new Set(['vendor_bill', 'vendor_credit', 'customer_invoice', 'customer_credit'])
 
 /**
  * The universal record list — one component that renders EVERY documents-backed
@@ -197,7 +205,7 @@ export async function RecordListView({
 
   const [rowsRes, statusCounts, totalRow] = await Promise.all([
     (db.execute(sql`
-      select d.id, d.kind, d.currency${source.extraSelect ? sql`, ${source.extraSelect}` : sql``}, ${selectCols}
+      select d.id, d.kind, d.currency, d.status as "__status", d.document_number as "__number"${source.extraSelect ? sql`, ${source.extraSelect}` : sql``}, ${selectCols}
         from ${fromClause}
        where ${where}
        order by ${listOrderClause(orderExpr, params.dir)}
@@ -253,6 +261,20 @@ export async function RecordListView({
       label: tCommon(`transactionTypes.${docTypeMeta(k).labelKey}` as never),
       count: Number(countByKind.get(k) ?? 0),
     }))
+  }
+
+  // Bulk lifecycle actions follow the reader's own grants for every kind the
+  // list shows; the actions route re-checks each document as it runs.
+  let bulkActions: BulkListActions | null = null
+  if (BULK_LIFECYCLE_RECORD_TYPES.has(recordType)) {
+    const authz = await resolveAuthzByUserId(orgId, userId)
+    if (authz) {
+      const actions = {
+        submit: source.kinds.every((kind) => can(authz, createPermission(kind))),
+        post: source.kinds.every((kind) => can(authz, postPermission(kind))),
+      }
+      bulkActions = actions.submit || actions.post ? actions : null
+    }
   }
 
   const openHref = (id: string) =>
@@ -391,40 +413,43 @@ export async function RecordListView({
         </div>
       ) : (
         <div className="mt-3">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                {cols.map((c) =>
-                  c.sortable && c.sortKey ? (
-                    <SortTh
-                      key={c.key}
-                      basePath={basePath}
-                      currentParams={sp}
-                      column={c.sortKey}
-                      sort={params.sort}
-                      dir={params.dir}
-                      align={c.kind === 'amount' ? 'right' : undefined}
-                    >
-                      {c.label}
-                    </SortTh>
-                  ) : (
-                    <TableHead
-                      key={c.key}
-                      className={c.kind === 'amount' ? 'text-right' : undefined}
-                      style={c.width ? { width: c.width } : undefined}
-                    >
-                      {c.label}
-                    </TableHead>
-                  ),
-                )}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((row) => (
-                <TableRow key={String(row.id)}>{cols.map((c) => cell(row, c))}</TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          {(() => {
+            const headerCells = cols.map((c) =>
+              c.sortable && c.sortKey ? (
+                <SortTh
+                  key={c.key}
+                  basePath={basePath}
+                  currentParams={sp}
+                  column={c.sortKey}
+                  sort={params.sort}
+                  dir={params.dir}
+                  align={c.kind === 'amount' ? 'right' : undefined}
+                >
+                  {c.label}
+                </SortTh>
+              ) : (
+                <TableHead
+                  key={c.key}
+                  className={c.kind === 'amount' ? 'text-right' : undefined}
+                  style={c.width ? { width: c.width } : undefined}
+                >
+                  {c.label}
+                </TableHead>
+              ),
+            )
+            return (
+              <RecordListBulkTable
+                header={headerCells}
+                actions={bulkActions}
+                rows={rows.map((row) => ({
+                  id: String(row.id),
+                  number: String(row.__number ?? ''),
+                  status: String(row.__status ?? ''),
+                  cells: <>{cols.map((c) => cell(row, c))}</>,
+                }))}
+              />
+            )
+          })()}
           <div className="mt-3">
             <Pagination basePath={basePath} currentParams={sp} total={filteredTotal} page={params.page} perPage={params.perPage} />
           </div>

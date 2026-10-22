@@ -274,7 +274,7 @@ test("an unsaved journal opens on its date field, writes nothing, and saves thro
   const posts = journalPosts(calls);
   assert.equal(posts.length, 1, "Ctrl+S runs exactly one create");
   assert.equal(posts[0]!.url, "/api/journals");
-  assert.match(String((posts[0]!.init?.headers as Record<string, string>)["Idempotency-Key"]), /^[0-9a-f-]{36}$/);
+  assert.match(String((posts[0]!.init?.headers as Record<string, string>)["Idempotency-Key"]), /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
   assert.equal(router.replaces.at(-1), `/journal?entry=${createdId}`, "a plain save opens the created journal");
 });
 

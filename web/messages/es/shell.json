@@ -29,7 +29,8 @@
     "manageEnvironments": "Gestionar entornos",
     "keyboardShortcuts": "Atajos de teclado",
     "switchFailed": "No se pudo cambiar de espacio de trabajo. Inténtalo de nuevo.",
-    "switchUnavailable": "Ya no tienes acceso a ese espacio de trabajo."
+    "switchUnavailable": "Ya no tienes acceso a ese espacio de trabajo.",
+    "dataEntry": "Entrada de datos"
   },
   "sandboxBanner": {
     "sandbox": "Entorno de sandbox",
@@ -84,6 +85,7 @@
       "salesOrder": "Pedido de venta",
       "customerPayment": "Pago de cliente",
       "bill": "Factura de proveedor",
+      "billBatch": "Varias facturas de proveedor (entrada por lotes)",
       "vendorCredit": "Crédito de proveedor",
       "purchaseOrder": "Orden de compra",
       "vendorPayment": "Pago a proveedor",
@@ -139,8 +141,11 @@
       "dashboards": "Paneles",
       "locations": "Ubicaciones",
       "warehouses": "Almacenes",
-      "workOrders": "Órdenes de fabricación"
-    }
+      "workOrders": "Órdenes de fabricación",
+      "actions": "Acciones"
+    },
+    "createAction": "Crear: {name}",
+    "createVerbs": "new create add enter make nuevo nueva crear agregar añadir anadir registrar introducir"
   },
   "meta": {
     "description": "La suite empresarial abierta. Opere con libros abiertos."
@@ -288,7 +293,11 @@
       "save": "Guardar",
       "saveAndNew": "Guardar y nuevo",
       "saveAndClose": "Guardar y cerrar",
-      "addLine": "Añadir línea"
+      "addLine": "Añadir línea",
+      "fieldHelp": "Explicar el campo activo",
+      "postAndNew": "Contabilizar y nuevo",
+      "postRecord": "Guardar y contabilizar",
+      "recallLast": "Usar las líneas del último documento"
     }
   },
   "dateEntry": {

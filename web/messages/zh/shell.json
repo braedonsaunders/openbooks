@@ -29,7 +29,8 @@
     "manageEnvironments": "管理环境",
     "keyboardShortcuts": "键盘快捷键",
     "switchFailed": "无法切换工作区，请重试。",
-    "switchUnavailable": "你已无权访问该工作区。"
+    "switchUnavailable": "你已无权访问该工作区。",
+    "dataEntry": "数据录入"
   },
   "sandboxBanner": {
     "sandbox": "沙盒环境",
@@ -84,6 +85,7 @@
       "salesOrder": "销售订单",
       "customerPayment": "客户付款",
       "bill": "账单",
+      "billBatch": "多张账单（批量录入）",
       "vendorCredit": "供应商贷记",
       "purchaseOrder": "采购订单",
       "vendorPayment": "供应商付款",
@@ -139,8 +141,11 @@
       "dashboards": "仪表板",
       "locations": "地点",
       "warehouses": "仓库",
-      "workOrders": "生产工单"
-    }
+      "workOrders": "生产工单",
+      "actions": "操作"
+    },
+    "createAction": "创建：{name}",
+    "createVerbs": "new create add enter make 新建 创建 新增 添加 录入"
   },
   "meta": {
     "description": "开放的商业套件。运行于开放账簿之上。"
@@ -288,7 +293,11 @@
       "save": "保存",
       "saveAndNew": "保存并新建",
       "saveAndClose": "保存并关闭",
-      "addLine": "添加行"
+      "addLine": "添加行",
+      "fieldHelp": "说明当前字段",
+      "postAndNew": "过账并新建",
+      "postRecord": "保存并过账",
+      "recallLast": "使用上一张单据的行"
     }
   },
   "dateEntry": {

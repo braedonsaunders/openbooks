@@ -69,7 +69,6 @@ const columns: LineGridColumn<Row>[] = [
 
 function Probe({ initial }: { initial: Row[] }) {
   const [rows, setRows] = useState(initial)
-  store.rows = rows
   return (
     <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
       <div role="dialog">
@@ -88,6 +87,7 @@ function Probe({ initial }: { initial: Row[] }) {
 }
 
 async function mount(initial: Row[]) {
+  store.rows = initial
   const host = document.createElement('div')
   document.body.appendChild(host)
   const root = createRoot(host)

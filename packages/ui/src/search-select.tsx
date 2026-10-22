@@ -39,8 +39,8 @@ export type SelectOption = {
 
 /** Sentinel value for the inline "Create …" row; never a real option value. */
 const CREATE_VALUE = '\u0000create'
-/** Keys a picker never treats as typed text. */
-const NON_TEXT_KEYS = new Set([' ', 'Enter', 'Tab', 'Escape'])
+/** Keys a picker never treats as typed text; `?` always opens the keyboard help. */
+const NON_TEXT_KEYS = new Set([' ', 'Enter', 'Tab', 'Escape', '?'])
 
 export type SearchSelectScanResult =
   | { ok: true; value: string; label?: string; unit?: string | null }
@@ -50,6 +50,22 @@ type BarcodeDetectorWindow = Window & {
   BarcodeDetector?: new (options?: { formats?: string[] }) => {
     detect(source: HTMLVideoElement): Promise<Array<{ rawValue: string }>>
   }
+}
+
+/** Poll the camera for a barcode until one reads or the time runs out. */
+async function detectBarcode(
+  detector: { detect(source: HTMLVideoElement): Promise<Array<{ rawValue: string }>> },
+  video: HTMLVideoElement,
+  timeoutMs: number,
+): Promise<string | null> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    const detections = await detector.detect(video)
+    const value = detections.find((detection) => detection.rawValue)?.rawValue
+    if (value) return value
+    await new Promise((resolve) => setTimeout(resolve, 120))
+  }
+  return null
 }
 
 export function SearchSelect({
@@ -203,7 +219,7 @@ export function SearchSelect({
   const display = selected?.label ?? (showEmpty ? emptyLabel : resolvedPlaceholder)
   const isPlaceholder = !selected && !showEmpty
 
-  const resolveTypedScan = useCallback(async (raw: string) => {
+  const resolveTypedScan = async (raw: string) => {
     if (!scanResolver || disabled) return
     const result = await scanResolver(raw)
     if (result.ok) {
@@ -232,12 +248,14 @@ export function SearchSelect({
     const choices = missingChoices.length ? ` ${missingChoices.join('; ')}` : ''
     setScanMessage(`${message}${choices}`)
     setScanFailed(true)
-  }, [allOptions, disabled, onChange, onSearchChange, scanResolver, t])
+  }
 
   /** Returns true when the key completed a keyboard-wedge scan. */
-  const scannerKeyDown = useCallback((event: ReactKeyboardEvent<HTMLElement>): boolean => {
+  // Keyboard-wedge scanners type faster than people: keys arriving within
+  // 150 ms of each other (by the events' own timestamps) form one scan.
+  const scannerKeyDown = (event: ReactKeyboardEvent<HTMLElement>): boolean => {
     if (!scanResolver || disabled || event.altKey || event.ctrlKey || event.metaKey) return false
-    const now = Date.now()
+    const now = event.timeStamp
     if (event.key === 'Enter') {
       const { value, at } = scanBuffer.current
       scanBuffer.current = { value: '', at: 0 }
@@ -259,9 +277,9 @@ export function SearchSelect({
       scanBuffer.current = { value: '', at: 0 }
     }
     return false
-  }, [disabled, resolveTypedScan, scanResolver])
+  }
 
-  const scanWithCamera = useCallback(async () => {
+  const scanWithCamera = async () => {
     const Detector = typeof window === 'undefined' ? undefined : (window as BarcodeDetectorWindow).BarcodeDetector
     const video = videoRef.current
     if (!Detector || !navigator.mediaDevices?.getUserMedia || !video) {
@@ -277,16 +295,10 @@ export function SearchSelect({
       stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false })
       video.srcObject = stream
       await video.play()
-      const detector = new Detector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39'] })
-      const deadline = Date.now() + 15000
-      while (Date.now() < deadline) {
-        const detections = await detector.detect(video)
-        const value = detections.find((detection) => detection.rawValue)?.rawValue
-        if (value) {
-          await resolveTypedScan(value)
-          return
-        }
-        await new Promise((resolve) => setTimeout(resolve, 120))
+      const value = await detectBarcode(new Detector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39'] }), video, 15000)
+      if (value) {
+        await resolveTypedScan(value)
+        return
       }
       setScanMessage(t('cameraUnavailable'))
       setScanFailed(true)
@@ -298,7 +310,7 @@ export function SearchSelect({
       video.srcObject = null
       setCameraActive(false)
     }
-  }, [resolveTypedScan, t])
+  }
 
   const showSearch = searchable ?? (Boolean(scanResolver) || Boolean(onCreate) || allOptions.length > 7 || allOptions.some((o) => o.group))
   const place = useCallback(() => {
@@ -555,8 +567,9 @@ export function SearchSelect({
         return
       }
       case 'Tab': {
-        // Tab accepts what the clerk narrowed to (QuickBooks/Xero behaviour)
-        // and moves on; with nothing typed it just leaves, keeping the value.
+        // Tab accepts what the clerk narrowed to, as desktop accounting
+        // packages do, and moves on; with nothing typed it just leaves,
+        // keeping the value.
         consume()
         const direction = event.shiftKey ? 'previous' : 'next'
         const o = filtered[highlight]
@@ -571,7 +584,7 @@ export function SearchSelect({
     // option whose label starts with what was typed in quick succession.
     if (!showSearch && event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey && event.key !== ' ') {
       consume()
-      const now = Date.now()
+      const now = event.timeStamp
       const text = now - typeahead.current.at < 800 ? typeahead.current.text + event.key.toLowerCase() : event.key.toLowerCase()
       typeahead.current = { text, at: now }
       const match = filtered.findIndex((o) => !o.disabled && o.label.toLowerCase().startsWith(text))
@@ -629,7 +642,7 @@ export function SearchSelect({
       else {
         openMenu()
         const text = event.key.toLowerCase()
-        typeahead.current = { text, at: Date.now() }
+        typeahead.current = { text, at: event.timeStamp }
         const match = allOptions.findIndex((o) => !o.disabled && o.label.toLowerCase().startsWith(text))
         if (match !== -1) setHighlight(match)
       }

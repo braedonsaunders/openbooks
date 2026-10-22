@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 import {
   beginInboundMessage,
   consumeMailboxDelivery,
@@ -24,12 +24,7 @@ import {
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function seedAdmin(org: ScratchOrg): Promise<string> {
-  const userId = randomUUID();
-  await db.execute(sql`
-    insert into users (id, org_id, email, name, password_hash, is_active)
-    values (${userId}, ${org.orgId}, ${`ap-admin-${userId.slice(0, 8)}@scratch.test`}, 'AP Admin', 'x', true)
-  `);
-  return userId;
+  return createScratchUser(org.orgId, 'AP Admin', 'admin');
 }
 
 const BASE = {

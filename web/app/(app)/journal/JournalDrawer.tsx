@@ -650,7 +650,9 @@ function JournalDrawerBody({
   // Saves, posts, deletes and voids run on the shared action path: a
   // refusal pins until the next action AND toasts,
   // and busy always releases through the package's finally.
-  const { busy, refusal, execute, clearRefusal, refuse, runExclusive } = useAppAction()
+  const { busy, refusal, execute, clearRefusal, refuse } = useAppAction()
+  const saveRunning = useRef(false)
+  const postFromKeyboardRunning = useRef(false)
   // A posted-with-warnings post pins here: the entry IS posted,
   // but its party-less control legs sit outside every subledger, so the
   // drawer keeps saying so until the next action (same rule as refusals).
@@ -1025,67 +1027,75 @@ function JournalDrawerBody({
    * saved journal, open a fresh one on the same date, or close the drawer.
    * Guarded against re-entry so a held shortcut cannot send the write twice.
    */
-  const save = runExclusive(async (then: SaveThen = 'view') => {
-    if (createMode) {
-      await saveNew(then)
-      return
-    }
-    if (refuseMissingAccount() || refuseInvalidAmounts()) return
-    const entryDate = documentDate
-    setSaveState('saving')
-    if (documentRevisionRef.current == null) await refreshFromServer(false).catch(() => {})
-    const revision = documentRevisionRef.current
-    if (revision == null) {
-      setSaveState('error')
-      refuse(null, t('postFailed'))
-      return
-    }
-    const ok = await execute(
-      async () => {
-        const outcome = await saveJournalDraft({
-          documentId: String(doc.id),
-          revision,
-          payload,
-          fallbackMessage: t('postFailed'),
-        })
-        // saveJournalDraft reports messages, not wire statuses: the saved
-        // branch is exact (the journals PATCH answers 200), the refusal
-        // branches carry the routing in their kind instead.
-        if (outcome.status === 'saved') return { ok: true, status: 200, data: outcome } as const
-        if (outcome.status === 'conflict') {
-          await refreshFromServer(false).catch(() => {})
-          return { ok: false, error: new ActionError({ kind: 'conflict', serverMessage: outcome.message }) }
-        }
-        // saveJournalDraft reports messages, not statuses: every non-conflict
-        // failure classifies as a domain refusal. The message always renders
-        // either way; only log-worthy routing differs.
-        return { ok: false, error: new ActionError({ kind: 'refused', serverMessage: outcome.message }) }
-      },
-      {
-        fallbackMessage: t('postFailed'),
-        onOk: (outcome) => {
-          const savedJournal = outcome.saved
-          draftBaseline.current = {
-            documentId: String(savedJournal.doc.id),
-            revision: outcome.revision,
-            payload: savedJournal,
+  // One run at a time: a second press while the first is still saving or
+  // posting is ignored rather than sending the same write twice.
+  async function save(then: SaveThen = 'view') {
+    if (saveRunning.current) return
+    saveRunning.current = true
+    try {
+      if (createMode) {
+        await saveNew(then)
+        return
+      }
+      if (refuseMissingAccount() || refuseInvalidAmounts()) return
+      const entryDate = documentDate
+      setSaveState('saving')
+      if (documentRevisionRef.current == null) await refreshFromServer(false).catch(() => {})
+      const revision = documentRevisionRef.current
+      if (revision == null) {
+        setSaveState('error')
+        refuse(null, t('postFailed'))
+        return
+      }
+      const ok = await execute(
+        async () => {
+          const outcome = await saveJournalDraft({
+            documentId: String(doc.id),
+            revision,
+            payload,
+            fallbackMessage: t('postFailed'),
+          })
+          // saveJournalDraft reports messages, not wire statuses: the saved
+          // branch is exact (the journals PATCH answers 200), the refusal
+          // branches carry the routing in their kind instead.
+          if (outcome.status === 'saved') return { ok: true, status: 200, data: outcome } as const
+          if (outcome.status === 'conflict') {
+            await refreshFromServer(false).catch(() => {})
+            return { ok: false, error: new ActionError({ kind: 'conflict', serverMessage: outcome.message }) }
           }
-          seenPersistedRevisions.current.add(outcome.revision)
-          resetForm(savedJournal)
-          setDocumentRevision(outcome.revision)
-          setSaveState('saved')
-          setDirty(false)
-          setMode('view')
-          if (then === 'new') startNextJournal(entryDate)
-          else if (then === 'close') router.push(returnHref as never)
+          // saveJournalDraft reports messages, not statuses: every non-conflict
+          // failure classifies as a domain refusal. The message always renders
+          // either way; only log-worthy routing differs.
+          return { ok: false, error: new ActionError({ kind: 'refused', serverMessage: outcome.message }) }
         },
-        onRefused: () => {
-          setSaveState('error')
+        {
+          fallbackMessage: t('postFailed'),
+          onOk: (outcome) => {
+            const savedJournal = outcome.saved
+            draftBaseline.current = {
+              documentId: String(savedJournal.doc.id),
+              revision: outcome.revision,
+              payload: savedJournal,
+            }
+            seenPersistedRevisions.current.add(outcome.revision)
+            resetForm(savedJournal)
+            setDocumentRevision(outcome.revision)
+            setSaveState('saved')
+            setDirty(false)
+            setMode('view')
+            if (then === 'new') startNextJournal(entryDate)
+            else if (then === 'close') router.push(returnHref as never)
+          },
+          onRefused: () => {
+            setSaveState('error')
+          },
         },
-      },
-    )
-    if (ok) router.refresh()
-  })
+      )
+      if (ok) router.refresh()
+    } finally {
+      saveRunning.current = false
+    }
+  }
 
   function cancel() {
     // Unsaved-create Cancel writes nothing: there is no persisted row to
@@ -1244,137 +1254,145 @@ function JournalDrawerBody({
    * committed). A post that reports advisories stays on the posted journal
    * so they are read, not skipped.
    */
-  const postFromKeyboard = runExclusive(async (then: 'new' | 'stay') => {
-    if (!(then === 'new' ? canPostAndNew : canKeyboardPost)) return
-    if (refuseInvalidAmounts()) return
-    if (editable && refuseMissingAccount()) return
-    if (!balanced) {
-      refuse(
-        statistical
-          ? t('statisticalIncomplete')
-          : diff !== 0n && !mixedCurrencies
-            ? t('outOfBalance', { amount: money(formatJournalAmount(diff < 0n ? -diff : diff)) })
-            : t('postNeedsAmounts'),
-        t('postFailed'),
-      )
-      return
-    }
-    setPostWarnings([])
-    const entryDate = documentDate
-    const progress: { createdId: string | null; saved: { journal: JournalPayload; revision: string } | null; documentId: string; revision: string | null } = {
-      createdId: null,
-      saved: null,
-      documentId: String(doc.id),
-      revision: documentRevisionRef.current,
-    }
-    let posted: PostResponse | null = null
-    const persistsFirst = createMode || (editable && dirty)
-    setSaveState('saving')
-    const ok = await execute(
-      async () => {
-        if (createMode) {
-          if (!requestIdRef.current) requestIdRef.current = crypto.randomUUID()
-          const created = await fetchAppAction('/api/journals', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Idempotency-Key': requestIdRef.current },
-            body: JSON.stringify(payload),
-          }, { fallback: t('postFailed') })
-          if (!created.ok) return created
-          const createdDoc = (created.data as { doc?: { id?: unknown; updated_at?: unknown } } | null)?.doc
-          if (typeof createdDoc?.id !== 'string' || createdDoc.id === '') {
-            return { ok: false, error: new ActionError({ kind: 'refused', serverMessage: t('createUnconfirmed') }) }
-          }
-          progress.createdId = createdDoc.id
-          progress.documentId = createdDoc.id
-          progress.revision = isDocumentRevisionToken(createdDoc.updated_at) ? createdDoc.updated_at : null
-          if (progress.revision == null) {
-            const readBack = await loadDraftDocumentSnapshot(`/api/journals/${createdDoc.id}`, t('postFailed')).catch(() => null)
-            progress.revision = readBack?.revision ?? null
-          }
-        } else if (editable && dirty) {
-          if (progress.revision == null) {
+  // One run at a time: a second press while the first is still saving or
+  // posting is ignored rather than sending the same write twice.
+  async function postFromKeyboard(then: 'new' | 'stay') {
+    if (postFromKeyboardRunning.current) return
+    postFromKeyboardRunning.current = true
+    try {
+      if (!(then === 'new' ? canPostAndNew : canKeyboardPost)) return
+      if (refuseInvalidAmounts()) return
+      if (editable && refuseMissingAccount()) return
+      if (!balanced) {
+        refuse(
+          statistical
+            ? t('statisticalIncomplete')
+            : diff !== 0n && !mixedCurrencies
+              ? t('outOfBalance', { amount: money(formatJournalAmount(diff < 0n ? -diff : diff)) })
+              : t('postNeedsAmounts'),
+          t('postFailed'),
+        )
+        return
+      }
+      setPostWarnings([])
+      const entryDate = documentDate
+      const progress: { createdId: string | null; saved: { journal: JournalPayload; revision: string } | null; documentId: string; revision: string | null } = {
+        createdId: null,
+        saved: null,
+        documentId: String(doc.id),
+        revision: documentRevisionRef.current,
+      }
+      let posted: PostResponse | null = null
+      const persistsFirst = createMode || (editable && dirty)
+      setSaveState('saving')
+      const ok = await execute(
+        async () => {
+          if (createMode) {
+            if (!requestIdRef.current) requestIdRef.current = crypto.randomUUID()
+            const created = await fetchAppAction('/api/journals', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Idempotency-Key': requestIdRef.current },
+              body: JSON.stringify(payload),
+            }, { fallback: t('postFailed') })
+            if (!created.ok) return created
+            const createdDoc = (created.data as { doc?: { id?: unknown; updated_at?: unknown } } | null)?.doc
+            if (typeof createdDoc?.id !== 'string' || createdDoc.id === '') {
+              return { ok: false, error: new ActionError({ kind: 'refused', serverMessage: t('createUnconfirmed') }) }
+            }
+            progress.createdId = createdDoc.id
+            progress.documentId = createdDoc.id
+            progress.revision = isDocumentRevisionToken(createdDoc.updated_at) ? createdDoc.updated_at : null
+            if (progress.revision == null) {
+              const readBack = await loadDraftDocumentSnapshot(`/api/journals/${createdDoc.id}`, t('postFailed')).catch(() => null)
+              progress.revision = readBack?.revision ?? null
+            }
+          } else if (editable && dirty) {
+            if (progress.revision == null) {
+              await refreshFromServer(false).catch(() => {})
+              progress.revision = documentRevisionRef.current
+            }
+            if (progress.revision == null) return { ok: false, error: new ActionError({ kind: 'refused', serverMessage: t('postFailed') }) }
+            const outcome = await saveJournalDraft({
+              documentId: progress.documentId,
+              revision: progress.revision,
+              payload,
+              fallbackMessage: t('postFailed'),
+            })
+            if (outcome.status === 'conflict') {
+              await refreshFromServer(false).catch(() => {})
+              return { ok: false, error: new ActionError({ kind: 'conflict', serverMessage: outcome.message }) }
+            }
+            if (outcome.status !== 'saved') {
+              return { ok: false, error: new ActionError({ kind: 'refused', serverMessage: outcome.message }) }
+            }
+            progress.saved = { journal: outcome.saved, revision: outcome.revision }
+            progress.revision = outcome.revision
+          } else if (progress.revision == null) {
             await refreshFromServer(false).catch(() => {})
             progress.revision = documentRevisionRef.current
           }
-          if (progress.revision == null) return { ok: false, error: new ActionError({ kind: 'refused', serverMessage: t('postFailed') }) }
-          const outcome = await saveJournalDraft({
-            documentId: progress.documentId,
-            revision: progress.revision,
-            payload,
-            fallbackMessage: t('postFailed'),
-          })
-          if (outcome.status === 'conflict') {
-            await refreshFromServer(false).catch(() => {})
-            return { ok: false, error: new ActionError({ kind: 'conflict', serverMessage: outcome.message }) }
+          if (progress.revision == null) {
+            return { ok: false, error: new ActionError({ kind: 'refused', serverMessage: t('postFailed') }) }
           }
-          if (outcome.status !== 'saved') {
-            return { ok: false, error: new ActionError({ kind: 'refused', serverMessage: outcome.message }) }
-          }
-          progress.saved = { journal: outcome.saved, revision: outcome.revision }
-          progress.revision = outcome.revision
-        } else if (progress.revision == null) {
-          await refreshFromServer(false).catch(() => {})
-          progress.revision = documentRevisionRef.current
-        }
-        if (progress.revision == null) {
-          return { ok: false, error: new ActionError({ kind: 'refused', serverMessage: t('postFailed') }) }
-        }
-        return requestPost(progress.documentId, progress.revision)
-      },
-      {
-        fallbackMessage: t('postFailed'),
-        onOk: (data) => {
-          posted = data as PostResponse
+          return requestPost(progress.documentId, progress.revision)
         },
-      },
-    )
-    const saved = progress.saved
-    if (saved) {
-      // The edits committed even if the post did not: adopt them as the baseline.
-      draftBaseline.current = { documentId: String(saved.journal.doc.id), revision: saved.revision, payload: saved.journal }
-      seenPersistedRevisions.current.add(saved.revision)
-      resetForm(saved.journal)
-      setDocumentRevision(saved.revision)
-      setDirty(false)
-      setMode('view')
-    }
-    // Only a write that failed leaves the editor in its error state; a
-    // refused post of a saved journal leaves the save itself standing.
-    setSaveState(ok || saved || progress.createdId || !persistsFirst ? 'saved' : 'error')
-    const answer = posted as PostResponse | null
-    if (!ok || !answer) {
-      if (progress.createdId) {
-        // The create committed and the post refused: open the saved draft so
-        // the refusal can be resolved there; the refusal toast names why.
+        {
+          fallbackMessage: t('postFailed'),
+          onOk: (data) => {
+            posted = data as PostResponse
+          },
+        },
+      )
+      const saved = progress.saved
+      if (saved) {
+        // The edits committed even if the post did not: adopt them as the baseline.
+        draftBaseline.current = { documentId: String(saved.journal.doc.id), revision: saved.revision, payload: saved.journal }
+        seenPersistedRevisions.current.add(saved.revision)
+        resetForm(saved.journal)
+        setDocumentRevision(saved.revision)
         setDirty(false)
-        toast.warning(t('savedNotPosted'))
+        setMode('view')
+      }
+      // Only a write that failed leaves the editor in its error state; a
+      // refused post of a saved journal leaves the save itself standing.
+      setSaveState(ok || saved || progress.createdId || !persistsFirst ? 'saved' : 'error')
+      const answer = posted as PostResponse | null
+      if (!ok || !answer) {
+        if (progress.createdId) {
+          // The create committed and the post refused: open the saved draft so
+          // the refusal can be resolved there; the refusal toast names why.
+          setDirty(false)
+          toast.warning(t('savedNotPosted'))
+          const separator = returnHref.includes('?') ? '&' : '?'
+          router.replace(`${returnHref}${separator}entry=${progress.createdId}` as never)
+        }
+        router.refresh()
+        return
+      }
+      const warnings = postWarningMessages(answer)
+      setDirty(false)
+      if (then === 'new' && warnings.length === 0) {
+        toast.success(answer.pendingApproval ? t('submittedAndNew') : t('postedAndNew'))
+        startNextJournal(entryDate)
+        router.refresh()
+        return
+      }
+      // Stay on the posted (or submitted) journal; advisories stay readable.
+      toast.success(answer.pendingApproval ? t('submitted') : t('postedToast'))
+      if (progress.createdId) {
+        for (const warning of warnings) toast.warning(warning)
         const separator = returnHref.includes('?') ? '&' : '?'
         router.replace(`${returnHref}${separator}entry=${progress.createdId}` as never)
+      } else {
+        const readBack = await refreshFromServer(false).catch(() => null)
+        if (readBack) setLiveDoc(asJournalDoc(readBack.payload.doc))
+        setPostWarnings(warnings)
       }
       router.refresh()
-      return
+    } finally {
+      postFromKeyboardRunning.current = false
     }
-    const warnings = postWarningMessages(answer)
-    setDirty(false)
-    if (then === 'new' && warnings.length === 0) {
-      toast.success(answer.pendingApproval ? t('submittedAndNew') : t('postedAndNew'))
-      startNextJournal(entryDate)
-      router.refresh()
-      return
-    }
-    // Stay on the posted (or submitted) journal; advisories stay readable.
-    toast.success(answer.pendingApproval ? t('submitted') : t('postedToast'))
-    if (progress.createdId) {
-      for (const warning of warnings) toast.warning(warning)
-      const separator = returnHref.includes('?') ? '&' : '?'
-      router.replace(`${returnHref}${separator}entry=${progress.createdId}` as never)
-    } else {
-      const readBack = await refreshFromServer(false).catch(() => null)
-      if (readBack) setLiveDoc(asJournalDoc(readBack.payload.doc))
-      setPostWarnings(warnings)
-    }
-    router.refresh()
-  })
+  }
   const postShortcuts = {
     postAndNew: canPostAndNew ? () => void postFromKeyboard('new') : undefined,
     post: canKeyboardPost ? () => void postFromKeyboard('stay') : undefined,
@@ -1796,7 +1814,7 @@ function JournalDrawerBody({
                 ...postShortcuts,
               }}
             />
-            <Button size="sm" variant={postShortcuts.postAndNew ? 'outline' : 'default'} className="h-8 px-2.5 text-xs" disabled={busy || hasInvalidAmounts} onClick={() => void save()}>
+            <Button size="sm" variant={canPostAndNew ? 'outline' : 'default'} className="h-8 px-2.5 text-xs" disabled={busy || hasInvalidAmounts} onClick={() => void save()}>
               {busy ? tc('actions.saving') : tc('actions.save')}
             </Button>
             {canCreate ? (
@@ -1804,8 +1822,8 @@ function JournalDrawerBody({
                 {t('saveAndNew')}
               </Button>
             ) : null}
-            {postShortcuts.postAndNew ? (
-              <Button size="sm" className="h-8 px-2.5 text-xs" disabled={busy || hasInvalidAmounts || !balanced} title={tEntry('buttons.postAndNewHint')} onClick={postShortcuts.postAndNew}>
+            {canPostAndNew ? (
+              <Button size="sm" className="h-8 px-2.5 text-xs" disabled={busy || hasInvalidAmounts || !balanced} title={tEntry('buttons.postAndNewHint')} onClick={() => void postFromKeyboard('new')}>
                 {tEntry('buttons.postAndNew')}
               </Button>
             ) : null}
@@ -1906,7 +1924,7 @@ function JournalDrawerBody({
       }
     >
       <div className="space-y-6 p-1">
-        {mode !== 'edit' && (postShortcuts.post || postShortcuts.postAndNew) ? (
+        {mode !== 'edit' && (canKeyboardPost || canPostAndNew) ? (
           // Reading a postable draft: Ctrl+Enter posts it and opens the next
           // journal, Ctrl+Shift+Enter posts it in place.
           <FormShortcuts enabled={!busy && saveState !== 'saving'} actions={postShortcuts} />

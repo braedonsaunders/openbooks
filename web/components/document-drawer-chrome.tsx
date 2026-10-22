@@ -408,7 +408,9 @@ export function renderDocumentDrawerChrome(scope: DocumentDrawerHeaderScope, chi
               : null}
           </span>
           <span className="flex-1" />
-          {editable && config.partyRole && !isTransfer ? (
+          {/* A control total checks lines keyed from someone else's document:
+              vendor bills and credits carry the vendor's printed total. */}
+          {editable && config.partyRole === 'vendor' && !isTransfer ? (
             <label className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400" title={tEntry('controlTotal.help')}>
               {tEntry('controlTotal.label')}
               <input

@@ -29,7 +29,7 @@ export function matchesCreateAction(query: string, label: string, verbs: readonl
   const verbSet = new Set(verbs.map((verb) => verb.toLowerCase()))
   const rest = words.filter((word) => !verbSet.has(word))
   if (rest.length === 0) return words.length > 0
-  const labelWords = label.toLowerCase().split(/[\s\-_/]+/).filter(Boolean)
+  const labelWords = label.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean)
   return rest.every((word) => labelWords.some((part) => part.startsWith(word)))
 }
 type Group = { type: string; labelKey: string; hits: Hit[] }
@@ -120,6 +120,7 @@ export function GlobalSearch({
         type: 'action',
         title: t('createAction', { name: tCreate(`items.${action.key}` as never) }),
         href: '',
+        iconKey: 'plus',
       }))
     return hits.length ? { type: 'action', labelKey: 'actions', hits } : null
   }, [createActions, createPermissions, pageQuery, t, tCreate])

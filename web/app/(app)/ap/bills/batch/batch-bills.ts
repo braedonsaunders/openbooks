@@ -14,8 +14,11 @@ import { resolveEnteredAmount } from '../../../../../lib/entry-amount'
 
 export const BATCH_BILL_KIND = 'vendor_bill'
 
-/** Rows saved at the same time. Small, so a batch never floods the server. */
-export const BATCH_SAVE_CONCURRENCY = 3
+/**
+ * Bills save one at a time, in row order, so their document numbers follow
+ * the order they were keyed in, exactly like entering them one by one.
+ */
+export const BATCH_SAVE_CONCURRENCY = 1
 
 export type BatchRowOutcome = '' | 'saved' | 'posted' | 'pending'
 

@@ -1,93 +1,117 @@
 {
-  "moreDetails": "More details",
-  "noPaymentTermsVendor": "No payment terms on {name} — set terms on the vendor or a company default",
+  "moreDetails": "Plus de détails",
+  "noPaymentTermsVendor": "Aucune condition de paiement pour {name} — définissez des conditions sur le fournisseur ou une valeur par défaut de la société",
   "partyDefault": {
-    "configured": "New lines use {account}, the default account for {party}.",
-    "history": "New lines use {account}, used on {count, plural, one {# recent document} other {# recent documents}} from {party}."
+    "configured": "Les nouvelles lignes utilisent {account}, le compte par défaut de {party}.",
+    "history": "Les nouvelles lignes utilisent {account}, utilisé sur {count, plural, one {# document récent} other {# documents récents}} de {party}."
   },
   "controlTotal": {
-    "label": "Control total",
-    "help": "Type the total printed on the vendor's document. Saving waits until the lines add up to it.",
-    "off": "Off by {difference}",
-    "mismatch": "The lines don't add up to the control total yet: they are off by {difference}. Correct a line, or clear the control total.",
-    "invalid": "The control total isn't an amount. Type a number such as 1250.00, or clear it."
+    "label": "Total de contrôle",
+    "help": "Saisissez le total imprimé sur le document du fournisseur. L’enregistrement n’est possible que lorsque les lignes atteignent ce total.",
+    "off": "Écart de {difference}",
+    "mismatch": "Les lignes ne correspondent pas encore au total de contrôle : l’écart est de {difference}. Corrigez une ligne ou effacez le total de contrôle.",
+    "invalid": "Le total de contrôle n’est pas un montant. Saisissez un nombre tel que 1250.00, ou effacez-le."
   },
   "postAfterSave": {
-    "posted": "{number} saved and posted",
-    "pending": "{number} saved and submitted for approval"
+    "posted": "{number} enregistré et comptabilisé",
+    "pending": "{number} enregistré et soumis pour approbation"
   },
   "buttons": {
-    "saveDraft": "Save draft",
-    "saveHint": "Save as a draft (⌘S / Ctrl+S)",
-    "saveAndNew": "Save & new",
-    "saveAndNewHint": "Save and start the next one (⌃⌥S / Ctrl+Alt+S)",
-    "postAndNew": "Post & new",
-    "postAndNewHint": "Save, post and start the next one (⌘↵ / Ctrl+Enter)",
-    "post": "Post",
-    "postHint": "Save and post (⌘⇧↵ / Ctrl+Shift+Enter)"
+    "saveDraft": "Enregistrer le brouillon",
+    "saveHint": "Enregistrer comme brouillon (⌘S / Ctrl+S)",
+    "saveAndNew": "Enregistrer et nouveau",
+    "saveAndNewHint": "Enregistrer et commencer le suivant (⌃⌥S / Ctrl+Alt+S)",
+    "postAndNew": "Comptabiliser et nouveau",
+    "postAndNewHint": "Enregistrer, comptabiliser et commencer le suivant (⌘↵ / Ctrl+Enter)",
+    "post": "Comptabiliser",
+    "postHint": "Enregistrer et comptabiliser (⌘⇧↵ / Ctrl+Shift+Enter)"
   },
   "createParty": {
-    "vendor": "Create vendor “{name}”",
-    "customer": "Create customer “{name}”",
-    "failed": "The party could not be created."
+    "vendor": "Créer le fournisseur « {name} »",
+    "customer": "Créer le client « {name} »",
+    "failed": "Le tiers n’a pas pu être créé."
   },
   "duplicate": {
-    "title": "This vendor already has a bill with this invoice number",
+    "title": "Ce fournisseur a déjà une facture avec ce numéro de facture",
     "match": "{number} · {date} · {total} · {status}"
   },
   "recall": {
-    "offer": "Last from this party: {number} · {date} · {total} · {lines, plural, one {# line} other {# lines}}",
-    "use": "Use its lines",
-    "shortcut": "Use the last document's lines",
-    "shortcutHint": "Fill the lines from this party's last document (⌃⌥L / Ctrl+Alt+L)",
-    "applied": "Lines filled from {number}. Change anything that differs.",
-    "undo": "Undo"
+    "offer": "Dernier document de ce tiers : {number} · {date} · {total} · {lines, plural, one {# ligne} other {# lignes}}",
+    "use": "Reprendre ses lignes",
+    "shortcut": "Reprendre les lignes du dernier document",
+    "shortcutHint": "Remplir les lignes à partir du dernier document de ce tiers (⌃⌥L / Ctrl+Alt+L)",
+    "applied": "Lignes reprises de {number}. Modifiez ce qui diffère.",
+    "undo": "Annuler"
   },
   "preferences": {
-    "saveFailed": "The preference could not be saved. Try again.",
+    "saveFailed": "La préférence n’a pas pu être enregistrée. Réessayez.",
     "enterMovesToNextField": {
-      "label": "Enter moves to the next field",
-      "help": "Enter walks across a line and on to the next one, as in desktop accounting systems. Off: Enter moves down the column."
+      "label": "Enter passe au champ suivant",
+      "help": "Enter parcourt la ligne puis passe à la suivante, comme dans les logiciels de comptabilité de bureau. Désactivé : Enter descend dans la colonne."
     },
     "autoDecimal": {
-      "label": "Place the decimal point automatically",
-      "help": "Type 1785 to enter 17.85 in amount fields — for ten-key entry. Typing a decimal point still works as usual."
+      "label": "Placer le séparateur décimal automatiquement",
+      "help": "Tapez 1785 pour saisir 17.85 dans les champs de montant — pour la saisie au pavé numérique. La saisie d’un séparateur décimal fonctionne toujours normalement."
     },
     "keepDateOnNew": {
-      "label": "Keep the date on Save & new",
-      "help": "The next document starts with the date you just used."
+      "label": "Conserver la date avec Enregistrer et nouveau",
+      "help": "Le document suivant reprend la date que vous venez d’utiliser."
     },
     "keepPartyOnNew": {
-      "label": "Keep the vendor or customer on Save & new",
-      "help": "For entering several documents from the same party."
+      "label": "Conserver le fournisseur ou le client avec Enregistrer et nouveau",
+      "help": "Pour saisir plusieurs documents du même tiers."
     },
     "recallLastDocument": {
-      "label": "When you pick a vendor or customer",
-      "help": "Their most recent document of the same kind can fill the lines for you.",
-      "suggest": "Offer their last lines",
-      "apply": "Fill from their last document",
-      "off": "Don't recall"
+      "label": "Lorsque vous choisissez un fournisseur ou un client",
+      "help": "Son document le plus récent du même type peut remplir les lignes à votre place.",
+      "suggest": "Proposer ses dernières lignes",
+      "apply": "Remplir à partir de son dernier document",
+      "off": "Ne pas reprendre"
     }
   },
   "keys": {
-    "title": "Lines, lists and amounts",
-    "preferencesTitle": "Data entry preferences",
-    "gridEnter": "Next line (or next field, by preference)",
-    "gridShiftEnter": "Previous line",
-    "gridArrows": "Move between lines",
-    "gridTab": "Next field; past the last field, a new line",
-    "gridInsertBelow": "Insert a line below",
-    "gridInsertAbove": "Insert a line above",
-    "gridCopyAbove": "Copy the field from the line above",
-    "gridDuplicate": "Duplicate the line",
-    "gridRemove": "Remove the line",
-    "gridMove": "Move the line up or down",
-    "gridMenu": "Line menu",
-    "gridPaste": "Paste rows copied from a spreadsheet",
-    "pickerType": "Type to search a list (names and codes)",
-    "pickerTab": "Accept the highlighted match and move on",
-    "pickerOpen": "Open the list",
-    "amountMath": "Arithmetic in amounts (200+47.83)",
-    "fieldHelp": "Explain the focused field"
+    "title": "Lignes, listes et montants",
+    "preferencesTitle": "Préférences de saisie",
+    "gridEnter": "Ligne suivante (ou champ suivant, selon la préférence)",
+    "gridShiftEnter": "Ligne précédente",
+    "gridArrows": "Se déplacer entre les lignes",
+    "gridTab": "Champ suivant ; après le dernier champ, une nouvelle ligne",
+    "gridInsertBelow": "Insérer une ligne en dessous",
+    "gridInsertAbove": "Insérer une ligne au-dessus",
+    "gridCopyAbove": "Copier le champ de la ligne du dessus",
+    "gridDuplicate": "Dupliquer la ligne",
+    "gridRemove": "Retirer la ligne",
+    "gridMove": "Déplacer la ligne vers le haut ou le bas",
+    "gridMenu": "Menu de la ligne",
+    "gridPaste": "Coller des lignes copiées depuis un tableur",
+    "pickerType": "Saisir pour rechercher dans une liste (noms et codes)",
+    "pickerTab": "Accepter la correspondance en surbrillance et continuer",
+    "pickerOpen": "Ouvrir la liste",
+    "pickerClose": "Fermer une liste et conserver la valeur",
+    "pickerCreate": "Créer le fournisseur ou le client saisi",
+    "pickerClear": "Effacer un champ de liste facultatif",
+    "amountMath": "Calculs dans les montants (200+47.83)"
+  },
+  "bulk": {
+    "selectAll": "Tout sélectionner sur cette page",
+    "selectRow": "Sélectionner {number}",
+    "selected": "{count, plural, one {# sélectionné} other {# sélectionnés}}",
+    "post": "Comptabiliser {count, plural, one {# document} other {# documents}}",
+    "submit": "Soumettre {count, plural, one {# brouillon} other {# brouillons}}",
+    "clear": "Effacer",
+    "dismiss": "Fermer",
+    "running": "Traitement… {done} sur {total}",
+    "summary": "{posted} comptabilisé(s) · {pending} envoyé(s) pour approbation · {refused} refusé(s)",
+    "refusedFallback": "Le document n’a pas pu être traité.",
+    "confirmPostTitle": "Comptabiliser {count, plural, one {# document} other {# documents}} ?",
+    "confirmPostBody": "Chaque document est soumis si nécessaire et comptabilisé avec ses propres contrôles. Un document soumis à un workflow d’approbation est envoyé pour approbation à la place. Tout document refusé reste sélectionné avec le motif.",
+    "confirmSubmitTitle": "Soumettre {count, plural, one {# brouillon} other {# brouillons}} ?",
+    "confirmSubmitBody": "Chaque brouillon est soumis avec ses propres contrôles. Les brouillons auxquels aucun workflow d’approbation ne s’applique deviennent approuvés et prêts à être comptabilisés.",
+    "keys": {
+      "next": "Ligne suivante",
+      "previous": "Ligne précédente",
+      "toggle": "Sélectionner ou désélectionner la ligne",
+      "extend": "Étendre la sélection"
+    }
   }
 }

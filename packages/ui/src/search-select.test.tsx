@@ -155,3 +155,13 @@ test('recently chosen records lead the list under their own heading', async (t) 
   assert.match(listbox, /^Recent/)
   assert.equal(document.querySelector('[role="option"]')?.textContent, 'Grant Thornton LLP')
 })
+
+test('? on a focused control is left for the keyboard help, never typed into a search', async (t) => {
+  const { trigger, done } = await mount()
+  t.after(done)
+  trigger.focus()
+  const event = new window.KeyboardEvent('keydown', { key: '?', bubbles: true, cancelable: true })
+  await act(async () => { trigger.dispatchEvent(event); await tick() })
+  assert.equal(trigger.getAttribute('aria-expanded'), 'false')
+  assert.equal(event.defaultPrevented, false)
+})

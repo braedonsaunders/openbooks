@@ -114,6 +114,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'capture-list',
   'capture-not-configured',
   'capture-review-drawer',
+  'batch-bill-entry',
   'capture-upload',
   'capitalize-cost',
   'card-name-cell',

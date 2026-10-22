@@ -240,6 +240,36 @@ function blockSignature(blocks: TypedBlock[]): string[] {
  * Everything else that ships English verbatim is an untranslated string.
  */
 const COGNATES = new Set<string>([
+  // Inbound email providers keep their registered brand spelling; the duplicate-match line is placeholders only.
+  'fr:admin.setup.apCapture.providers.postmark|Postmark',
+  'fr:admin.setup.apCapture.providers.mailgun|Mailgun',
+  'fr:admin.setup.apCapture.providers.sendgrid|SendGrid',
+  'fr:entry.duplicate.match|{number} · {date} · {total} · {status}',
+  'es:admin.setup.apCapture.providers.postmark|Postmark',
+  'es:admin.setup.apCapture.providers.mailgun|Mailgun',
+  'es:admin.setup.apCapture.providers.sendgrid|SendGrid',
+  'es:entry.duplicate.match|{number} · {date} · {total} · {status}',
+  'de:admin.setup.apCapture.providers.postmark|Postmark',
+  'de:admin.setup.apCapture.providers.mailgun|Mailgun',
+  'de:admin.setup.apCapture.providers.sendgrid|SendGrid',
+  'de:entry.duplicate.match|{number} · {date} · {total} · {status}',
+  'pt-BR:admin.setup.apCapture.providers.postmark|Postmark',
+  'pt-BR:admin.setup.apCapture.providers.mailgun|Mailgun',
+  'pt-BR:admin.setup.apCapture.providers.sendgrid|SendGrid',
+  'pt-BR:entry.duplicate.match|{number} · {date} · {total} · {status}',
+  'zh:admin.setup.apCapture.providers.postmark|Postmark',
+  'zh:admin.setup.apCapture.providers.mailgun|Mailgun',
+  'zh:admin.setup.apCapture.providers.sendgrid|SendGrid',
+  'zh:entry.duplicate.match|{number} · {date} · {total} · {status}',
+  'ja:admin.setup.apCapture.providers.postmark|Postmark',
+  'ja:admin.setup.apCapture.providers.mailgun|Mailgun',
+  'ja:admin.setup.apCapture.providers.sendgrid|SendGrid',
+  'ja:entry.duplicate.match|{number} · {date} · {total} · {status}',
+  // Entry and inbox cognates: French Actions and Capture, Spanish Error, German Name are spelled as in English.
+  'fr:shell.globalSearch.groups.actions|Actions',
+  'fr:apInbox.inbox.columns.capture|Capture',
+  'es:apInbox.inbox.outcomes.error|Error',
+  'de:admin.setup.apCapture.fields.label|Name',
   // Billing platform product names remain in their registered brand spelling.
   'fr:billingImport.providers.chargebee|Chargebee',
   'fr:billingImport.providers.recurly|Recurly',

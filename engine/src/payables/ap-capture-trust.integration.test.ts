@@ -7,7 +7,7 @@ import type { NormalizedCapture } from "./ap-capture.ts";
 import { materializeCapture } from "./ap-capture-service.ts";
 import { considerCaptureAutoPost } from "./ap-capture-autopost.ts";
 import { resolveAutoPostPolicy, vendorCaptureTrust } from "./ap-capture-trust.ts";
-import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 
 /**
  * Trust and the auto-post policy read from the real schema: policy versions
@@ -113,11 +113,7 @@ test("trust evidence comes from capture history: an unposted draft and a correct
     assert.equal(pending.trusted, false);
     assert.deepEqual(pending.brokenBy, { captureItemId: newer, reason: "not_posted" }, "a draft awaiting posting is not evidence");
 
-    const reviewer = randomUUID();
-    await db.execute(sql`
-      insert into users (id, org_id, email, name, password_hash, is_active)
-      values (${reviewer}, ${org.orgId}, ${`reviewer-${reviewer.slice(0, 8)}@scratch.test`}, 'Reviewer', 'x', true)
-    `);
+    const reviewer = await createScratchUser(org.orgId, 'Reviewer', 'admin');
     await db.execute(sql`
       insert into ap_capture_corrections (org_id, capture_item_id, field_key, before_value, after_value, corrected_by)
       values (${org.orgId}, ${newer}, 'invoiceNumber', '"T-2"'::jsonb, '"T-2A"'::jsonb, ${reviewer})

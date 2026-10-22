@@ -1,93 +1,117 @@
 {
-  "moreDetails": "More details",
-  "noPaymentTermsVendor": "No payment terms on {name} — set terms on the vendor or a company default",
+  "moreDetails": "更多详情",
+  "noPaymentTermsVendor": "{name} 没有付款条件 — 请在供应商上设置付款条件，或设置公司默认值",
   "partyDefault": {
-    "configured": "New lines use {account}, the default account for {party}.",
-    "history": "New lines use {account}, used on {count, plural, one {# recent document} other {# recent documents}} from {party}."
+    "configured": "新行使用 {account}，即 {party} 的默认科目。",
+    "history": "新行使用 {account}，该科目曾用于 {party} 的{count, plural, one {# 份近期单据} other {# 份近期单据}}。"
   },
   "controlTotal": {
-    "label": "Control total",
-    "help": "Type the total printed on the vendor's document. Saving waits until the lines add up to it.",
-    "off": "Off by {difference}",
-    "mismatch": "The lines don't add up to the control total yet: they are off by {difference}. Correct a line, or clear the control total.",
-    "invalid": "The control total isn't an amount. Type a number such as 1250.00, or clear it."
+    "label": "控制总额",
+    "help": "输入供应商单据上打印的总额。行合计与该总额一致后才能保存。",
+    "off": "相差 {difference}",
+    "mismatch": "行合计与控制总额尚不一致：相差 {difference}。请更正某一行，或清除控制总额。",
+    "invalid": "控制总额不是有效金额。请输入数字（如 1250.00），或将其清除。"
   },
   "postAfterSave": {
-    "posted": "{number} saved and posted",
-    "pending": "{number} saved and submitted for approval"
+    "posted": "{number} 已保存并过账",
+    "pending": "{number} 已保存并提交审批"
   },
   "buttons": {
-    "saveDraft": "Save draft",
-    "saveHint": "Save as a draft (⌘S / Ctrl+S)",
-    "saveAndNew": "Save & new",
-    "saveAndNewHint": "Save and start the next one (⌃⌥S / Ctrl+Alt+S)",
-    "postAndNew": "Post & new",
-    "postAndNewHint": "Save, post and start the next one (⌘↵ / Ctrl+Enter)",
-    "post": "Post",
-    "postHint": "Save and post (⌘⇧↵ / Ctrl+Shift+Enter)"
+    "saveDraft": "保存草稿",
+    "saveHint": "保存为草稿 (⌘S / Ctrl+S)",
+    "saveAndNew": "保存并新建",
+    "saveAndNewHint": "保存并开始下一张 (⌃⌥S / Ctrl+Alt+S)",
+    "postAndNew": "过账并新建",
+    "postAndNewHint": "保存、过账并开始下一张 (⌘↵ / Ctrl+Enter)",
+    "post": "过账",
+    "postHint": "保存并过账 (⌘⇧↵ / Ctrl+Shift+Enter)"
   },
   "createParty": {
-    "vendor": "Create vendor “{name}”",
-    "customer": "Create customer “{name}”",
-    "failed": "The party could not be created."
+    "vendor": "创建供应商“{name}”",
+    "customer": "创建客户“{name}”",
+    "failed": "无法创建往来方。"
   },
   "duplicate": {
-    "title": "This vendor already has a bill with this invoice number",
+    "title": "该供应商已有使用此发票号的账单",
     "match": "{number} · {date} · {total} · {status}"
   },
   "recall": {
-    "offer": "Last from this party: {number} · {date} · {total} · {lines, plural, one {# line} other {# lines}}",
-    "use": "Use its lines",
-    "shortcut": "Use the last document's lines",
-    "shortcutHint": "Fill the lines from this party's last document (⌃⌥L / Ctrl+Alt+L)",
-    "applied": "Lines filled from {number}. Change anything that differs.",
-    "undo": "Undo"
+    "offer": "该往来方的上一张单据：{number} · {date} · {total} · {lines, plural, one {# 行} other {# 行}}",
+    "use": "使用其行",
+    "shortcut": "使用上一张单据的行",
+    "shortcutHint": "用该往来方上一张单据的行填充 (⌃⌥L / Ctrl+Alt+L)",
+    "applied": "已从 {number} 填充行。请修改不同之处。",
+    "undo": "撤销"
   },
   "preferences": {
-    "saveFailed": "The preference could not be saved. Try again.",
+    "saveFailed": "无法保存偏好设置，请重试。",
     "enterMovesToNextField": {
-      "label": "Enter moves to the next field",
-      "help": "Enter walks across a line and on to the next one, as in desktop accounting systems. Off: Enter moves down the column."
+      "label": "Enter 移到下一字段",
+      "help": "Enter 沿行逐个字段移动并进入下一行，与桌面会计软件一致。关闭时：Enter 沿列向下移动。"
     },
     "autoDecimal": {
-      "label": "Place the decimal point automatically",
-      "help": "Type 1785 to enter 17.85 in amount fields — for ten-key entry. Typing a decimal point still works as usual."
+      "label": "自动添加小数点",
+      "help": "在金额字段中输入 1785 即为 17.85，适合数字小键盘录入。输入小数点仍照常有效。"
     },
     "keepDateOnNew": {
-      "label": "Keep the date on Save & new",
-      "help": "The next document starts with the date you just used."
+      "label": "保存并新建时保留日期",
+      "help": "下一张单据沿用你刚使用的日期。"
     },
     "keepPartyOnNew": {
-      "label": "Keep the vendor or customer on Save & new",
-      "help": "For entering several documents from the same party."
+      "label": "保存并新建时保留供应商或客户",
+      "help": "用于录入同一往来方的多张单据。"
     },
     "recallLastDocument": {
-      "label": "When you pick a vendor or customer",
-      "help": "Their most recent document of the same kind can fill the lines for you.",
-      "suggest": "Offer their last lines",
-      "apply": "Fill from their last document",
-      "off": "Don't recall"
+      "label": "选择供应商或客户时",
+      "help": "可用其最近一张同类单据为你填充行。",
+      "suggest": "提示使用其上次的行",
+      "apply": "从其上一张单据填充",
+      "off": "不调用"
     }
   },
   "keys": {
-    "title": "Lines, lists and amounts",
-    "preferencesTitle": "Data entry preferences",
-    "gridEnter": "Next line (or next field, by preference)",
-    "gridShiftEnter": "Previous line",
-    "gridArrows": "Move between lines",
-    "gridTab": "Next field; past the last field, a new line",
-    "gridInsertBelow": "Insert a line below",
-    "gridInsertAbove": "Insert a line above",
-    "gridCopyAbove": "Copy the field from the line above",
-    "gridDuplicate": "Duplicate the line",
-    "gridRemove": "Remove the line",
-    "gridMove": "Move the line up or down",
-    "gridMenu": "Line menu",
-    "gridPaste": "Paste rows copied from a spreadsheet",
-    "pickerType": "Type to search a list (names and codes)",
-    "pickerTab": "Accept the highlighted match and move on",
-    "pickerOpen": "Open the list",
-    "amountMath": "Arithmetic in amounts (200+47.83)",
-    "fieldHelp": "Explain the focused field"
+    "title": "行、列表和金额",
+    "preferencesTitle": "数据录入偏好",
+    "gridEnter": "下一行（或按偏好设置移到下一字段）",
+    "gridShiftEnter": "上一行",
+    "gridArrows": "在行之间移动",
+    "gridTab": "下一字段；在最后一个字段之后新增一行",
+    "gridInsertBelow": "在下方插入一行",
+    "gridInsertAbove": "在上方插入一行",
+    "gridCopyAbove": "复制上一行的该字段",
+    "gridDuplicate": "复制该行",
+    "gridRemove": "移除该行",
+    "gridMove": "上移或下移该行",
+    "gridMenu": "行菜单",
+    "gridPaste": "粘贴从电子表格复制的行",
+    "pickerType": "输入以搜索列表（名称和代码）",
+    "pickerTab": "接受高亮的匹配项并继续",
+    "pickerOpen": "打开列表",
+    "pickerClose": "关闭列表并保留当前值",
+    "pickerCreate": "创建所输入的供应商或客户",
+    "pickerClear": "清空可选的列表字段",
+    "amountMath": "在金额中进行运算 (200+47.83)"
+  },
+  "bulk": {
+    "selectAll": "选择本页全部",
+    "selectRow": "选择 {number}",
+    "selected": "{count, plural, one {已选 # 项} other {已选 # 项}}",
+    "post": "过账 {count, plural, one {# 张单据} other {# 张单据}}",
+    "submit": "提交 {count, plural, one {# 份草稿} other {# 份草稿}}",
+    "clear": "清除",
+    "dismiss": "关闭",
+    "running": "处理中… {done} / {total}",
+    "summary": "{posted} 已过账 · {pending} 已送审 · {refused} 被拒绝",
+    "refusedFallback": "无法处理该单据。",
+    "confirmPostTitle": "过账 {count, plural, one {# 张单据} other {# 张单据}}？",
+    "confirmPostBody": "每张单据会在需要时先提交，并经其自身检查后过账。适用审批流程的单据将改为送审。被拒绝的单据会保持选中并显示原因。",
+    "confirmSubmitTitle": "提交 {count, plural, one {# 份草稿} other {# 份草稿}}？",
+    "confirmSubmitBody": "每份草稿经其自身检查后提交。不适用任何审批流程的草稿将直接获批，可供过账。",
+    "keys": {
+      "next": "下一行",
+      "previous": "上一行",
+      "toggle": "选择或取消选择该行",
+      "extend": "扩展选择"
+    }
   }
 }

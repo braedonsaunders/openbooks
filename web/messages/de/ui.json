@@ -42,7 +42,11 @@
     "scanUnavailable": "Der gescannte Datensatz ist für diese Zeile keine verfügbare Auswahl.",
     "scanNetworkError": "Der Scan konnte nicht aufgelöst werden. Prüfen Sie die Verbindung und versuchen Sie es erneut.",
     "scanNotFound": "Für diesen Scan wurde kein exakter Datensatz gefunden. Prüfen Sie den Wert oder wählen Sie einen Datensatz aus der Liste.",
-    "scanAmbiguous": "Dieser Scan passt zu mehreren Datensätzen. Wählen Sie den gewünschten Datensatz aus den Kandidaten."
+    "scanAmbiguous": "Dieser Scan passt zu mehreren Datensätzen. Wählen Sie den gewünschten Datensatz aus den Kandidaten.",
+    "recent": "Zuletzt verwendet",
+    "allOptions": "Alle",
+    "create": "„{query}“ anlegen",
+    "createFailed": "Dies konnte nicht angelegt werden."
   },
   "sparkline": {
     "noTrend": "Keine Trenddaten",
@@ -103,7 +107,7 @@
     "selectAll": "Alle Zeilen auswählen",
     "selectRow": "Zeile {row} auswählen",
     "addLine": "Zeile hinzufügen",
-    "keyboardHint": "Eingabe fügt hinzu/bewegt nach unten · Alt+↑/↓ ordnet um · ⌘D dupliziert · ⌘⌫ entfernt",
+    "keyboardHint": "Enter nächste Zeile · Tab nach dem Ende fügt eine Zeile hinzu · F8 kopiert von oben · Alt+Enter fügt ein · ⌘D dupliziert · ⌘⌫ entfernt · Zeilen aus einer Tabellenkalkulation einfügen",
     "lineActionsAria": "Aktionen für Zeile {number}",
     "insertAbove": "Oberhalb einfügen",
     "insertBelow": "Unterhalb einfügen",
@@ -116,6 +120,14 @@
       "computedOverriddenTitle": "Berechnet {amount} · überschrieben",
       "resetAria": "Steuer auf berechneten Wert zurücksetzen",
       "resetTitle": "Auf berechnete {amount} zurücksetzen"
-    }
+    },
+    "keyboardHintEnterAdvances": "Enter nächstes Feld · Shift+Enter vorherige Zeile · F8 kopiert von oben · Alt+Enter fügt ein · ⌘D dupliziert · ⌘⌫ entfernt · Zeilen aus einer Tabellenkalkulation einfügen",
+    "paste": {
+      "done": "{count, plural, one {# Zeile eingefügt} other {# Zeilen eingefügt}}.",
+      "unmatched": "{count, plural, one {# eingefügter Wert erfordert} other {# eingefügte Werte erfordern}} Ihre Aufmerksamkeit — die markierten Zellen zeigen, was eingefügt wurde.",
+      "unmatchedCell": "Der eingefügte Wert „{value}“ entspricht hier keiner Auswahl und keinem Betrag"
+    },
+    "moreColumns": "Alle Spalten anzeigen",
+    "fewerColumns": "Weniger Spalten anzeigen"
   }
 }

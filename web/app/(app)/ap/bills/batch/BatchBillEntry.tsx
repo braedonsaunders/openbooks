@@ -736,6 +736,7 @@ export function BatchBillEntry({
           getRowKey={(row) => row.key}
           cloneRow={cloneBatchRow}
           minorUnits={minorUnits}
+          showKeyboardHint={false}
           addLabel={t('actions.addBill')}
           formatAmount={(value) => money(value)}
         />

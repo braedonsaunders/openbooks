@@ -43,6 +43,7 @@ import { type ComponentProps } from 'react'
 import { ModuleHomeTabs } from '../module-home/ui'
 import { RelationshipsSection, ArPulse as CustomerArPulse } from '../../app/(app)/customers/sections'
 import { ApHeaderActions } from '../../app/(app)/ap/sections'
+import { BatchBillEntry } from '../../app/(app)/ap/bills/batch/BatchBillEntry'
 import { CollectionsShell } from '../../app/(app)/collections/sections'
 import { ItemDrawer } from '../../app/(app)/items/ItemDrawer'
 import { ItemDrawerSlot } from '../../app/(app)/items/ItemDrawerSlot'
@@ -183,6 +184,24 @@ export const COMMERCE_WIDGETS = {
     <ArCockpit
       data={props.data as ComponentProps<typeof ArCockpit>['data']}
       canCollect={props.canCollect === true}
+    />
+  ),
+  /** Whole: a keyboard grid of bills with control totals, live checks,
+   *  browser-held drafts and a save loop no block can name. */
+  'batch-bill-entry': (props) => (
+    <BatchBillEntry
+      orgId={str(props, 'orgId') ?? ''}
+      userId={str(props, 'userId') ?? ''}
+      today={str(props, 'today') ?? ''}
+      minorUnits={typeof props.minorUnits === 'number' ? props.minorUnits : 2}
+      vendors={(props.vendors as ComponentProps<typeof BatchBillEntry>['vendors']) ?? []}
+      accounts={(props.accounts as ComponentProps<typeof BatchBillEntry>['accounts']) ?? []}
+      taxProfiles={(props.taxProfiles as ComponentProps<typeof BatchBillEntry>['taxProfiles']) ?? []}
+      subsidiaries={(props.subsidiaries as ComponentProps<typeof BatchBillEntry>['subsidiaries']) ?? null}
+      defaultSubsidiaryId={str(props, 'defaultSubsidiaryId') ?? null}
+      canPost={props.canPost === true}
+      canCreateVendor={props.canCreateVendor === true}
+      helpHref={str(props, 'helpHref') ?? '/docs/batch-bill-entry'}
     />
   ),
   /** The button owns its own label; the spec only gates it. */

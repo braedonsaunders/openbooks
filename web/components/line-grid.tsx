@@ -405,6 +405,7 @@ export function LineGrid<Row extends Record<string, unknown>>({
   fixedRows = false,
   hideRemove = false,
   minorUnits = 2,
+  showKeyboardHint = true,
 }: {
   columns: LineGridColumn<Row>[]
   rows: Row[]
@@ -457,6 +458,8 @@ export function LineGrid<Row extends Record<string, unknown>>({
   cloneRow?: (row: Row) => Row
   /** Decimal places of the document currency, for amount display and auto decimal. */
   minorUnits?: number
+  /** Hide the key summary under the grid when the host page shows its own. */
+  showKeyboardHint?: boolean
 }) {
   const t = useTranslations('ui.lineGrid')
   const { preferences } = useEntryPreferences()
@@ -1135,7 +1138,7 @@ export function LineGrid<Row extends Record<string, unknown>>({
         )}
         {footer}
       </div>
-      {!readOnly && !fixedRows && !hideRemove ? (
+      {showKeyboardHint && !readOnly && !fixedRows && !hideRemove ? (
         <p className="mt-1.5 text-[11px] text-slate-400 dark:text-slate-500">
           {preferences.enterMovesToNextField ? t('keyboardHintEnterAdvances') : t('keyboardHint')}
         </p>

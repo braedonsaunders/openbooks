@@ -29,7 +29,8 @@
     "manageEnvironments": "環境を管理",
     "keyboardShortcuts": "キーボードショートカット",
     "switchFailed": "ワークスペースを切り替えられませんでした。もう一度お試しください。",
-    "switchUnavailable": "このワークスペースへのアクセス権がなくなりました。"
+    "switchUnavailable": "このワークスペースへのアクセス権がなくなりました。",
+    "dataEntry": "データ入力"
   },
   "sandboxBanner": {
     "sandbox": "サンドボックス環境",
@@ -84,6 +85,7 @@
       "salesOrder": "受注",
       "customerPayment": "得意先支払",
       "bill": "仕入請求書",
+      "billBatch": "複数の仕入請求書（一括入力）",
       "vendorCredit": "仕入先クレジット",
       "purchaseOrder": "発注書",
       "vendorPayment": "仕入先支払",
@@ -139,8 +141,11 @@
       "dashboards": "ダッシュボード",
       "locations": "拠点",
       "warehouses": "倉庫",
-      "workOrders": "製造指図"
-    }
+      "workOrders": "製造指図",
+      "actions": "アクション"
+    },
+    "createAction": "作成: {name}",
+    "createVerbs": "new create add enter make 新規 作成 追加 入力 登録 新規作成"
   },
   "meta": {
     "description": "オープンなビジネススイート。オープンな帳簿で運用しましょう。"
@@ -288,7 +293,11 @@
       "save": "保存",
       "saveAndNew": "保存して新規作成",
       "saveAndClose": "保存して閉じる",
-      "addLine": "行を追加"
+      "addLine": "行を追加",
+      "fieldHelp": "選択中の項目を説明",
+      "postAndNew": "転記して新規作成",
+      "postRecord": "保存して転記",
+      "recallLast": "前回の伝票の明細を使用"
     }
   },
   "dateEntry": {

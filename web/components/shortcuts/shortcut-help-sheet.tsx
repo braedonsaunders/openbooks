@@ -15,7 +15,7 @@ const ENTRY_KEYS: ReadonlyArray<{ id: string; keys: (apple: boolean) => string[]
   { id: 'gridTab', keys: () => ['Tab'] },
   { id: 'gridInsertBelow', keys: (apple) => [apple ? '⌥' : 'Alt', 'Enter'] },
   { id: 'gridInsertAbove', keys: (apple) => [apple ? '⌥' : 'Alt', apple ? '⇧' : 'Shift', 'Enter'] },
-  { id: 'gridCopyAbove', keys: () => ['F8'] },
+  { id: 'gridCopyAbove', keys: (apple) => ['F8', apple ? "⌘'" : "Ctrl+'"], separator: '/' },
   { id: 'gridDuplicate', keys: (apple) => [apple ? '⌘' : 'Ctrl', 'D'] },
   { id: 'gridRemove', keys: (apple) => [apple ? '⌘' : 'Ctrl', '⌫'] },
   { id: 'gridMove', keys: (apple) => [apple ? '⌥' : 'Alt', '↑/↓'] },
@@ -24,8 +24,10 @@ const ENTRY_KEYS: ReadonlyArray<{ id: string; keys: (apple: boolean) => string[]
   { id: 'pickerType', keys: () => ['A–Z'] },
   { id: 'pickerTab', keys: () => ['Tab'] },
   { id: 'pickerOpen', keys: () => ['F4'] },
+  { id: 'pickerClose', keys: () => ['Esc'] },
+  { id: 'pickerCreate', keys: () => ['↓', 'Enter'] },
+  { id: 'pickerClear', keys: () => ['Delete'] },
   { id: 'amountMath', keys: () => ['+', '−', '×', '÷'] },
-  { id: 'fieldHelp', keys: () => ['F1'] },
 ]
 
 const KEY_CAP =

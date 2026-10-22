@@ -42,7 +42,11 @@
     "scanUnavailable": "L’enregistrement scanné n’est pas un choix disponible pour cette ligne.",
     "scanNetworkError": "Le scan n’a pas pu être résolu. Vérifiez la connexion et réessayez.",
     "scanNotFound": "Aucun enregistrement ne correspond exactement à ce scan. Vérifiez la valeur ou choisissez un enregistrement dans la liste.",
-    "scanAmbiguous": "Ce scan correspond à plusieurs enregistrements. Choisissez l’enregistrement voulu parmi les candidats."
+    "scanAmbiguous": "Ce scan correspond à plusieurs enregistrements. Choisissez l’enregistrement voulu parmi les candidats.",
+    "recent": "Récents",
+    "allOptions": "Tous",
+    "create": "Créer « {query} »",
+    "createFailed": "Impossible de créer cet élément."
   },
   "sparkline": {
     "noTrend": "Aucune donnée de tendance",
@@ -103,7 +107,7 @@
     "selectAll": "Sélectionner toutes les lignes",
     "selectRow": "Sélectionner la ligne {row}",
     "addLine": "Ajouter une ligne",
-    "keyboardHint": "Entrée ajoute/descend · Alt+↑/↓ réordonne · ⌘D duplique · ⌘⌫ retire",
+    "keyboardHint": "Enter ligne suivante · Tab après la fin ajoute une ligne · F8 copie depuis le dessus · Alt+Enter insère · ⌘D duplique · ⌘⌫ retire · collez des lignes depuis un tableur",
     "lineActionsAria": "Actions de la ligne {number}",
     "insertAbove": "Insérer au-dessus",
     "insertBelow": "Insérer en dessous",
@@ -116,6 +120,14 @@
       "computedOverriddenTitle": "Calculée {amount} · remplacée",
       "resetAria": "Rétablir la taxe calculée",
       "resetTitle": "Rétablir la valeur calculée {amount}"
-    }
+    },
+    "keyboardHintEnterAdvances": "Enter champ suivant · Shift+Enter ligne précédente · F8 copie depuis le dessus · Alt+Enter insère · ⌘D duplique · ⌘⌫ retire · collez des lignes depuis un tableur",
+    "paste": {
+      "done": "{count, plural, one {# ligne collée} other {# lignes collées}}.",
+      "unmatched": "{count, plural, one {# valeur collée nécessite} other {# valeurs collées nécessitent}} votre attention — les cellules signalées indiquent ce qui a été collé.",
+      "unmatchedCell": "La valeur collée « {value} » ne correspond ici à aucun choix ni montant"
+    },
+    "moreColumns": "Afficher toutes les colonnes",
+    "fewerColumns": "Afficher moins de colonnes"
   }
 }

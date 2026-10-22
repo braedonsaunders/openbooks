@@ -67,10 +67,12 @@ export function RecordListBulkTable({
   const toggle = useCallback((index: number, extend: boolean) => {
     const row = rows[index]
     if (!row) return
+    // The range starts at the previous toggle, read before it moves here.
+    const from0 = anchor.current
     setSelected((current) => {
       const next = new Set(current)
-      if (extend && anchor.current !== null) {
-        const [from, to] = [Math.min(anchor.current, index), Math.max(anchor.current, index)]
+      if (extend && from0 !== null) {
+        const [from, to] = [Math.min(from0, index), Math.max(from0, index)]
         const adding = !current.has(row.id)
         for (let i = from; i <= to; i += 1) {
           const id = rows[i]!.id

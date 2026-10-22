@@ -142,6 +142,7 @@ export const WIDGET_FAMILY: Readonly<Record<string, WidgetFamily>> = {
   'capture-list': 'commerce',
   'capture-not-configured': 'commerce',
   'capture-review-drawer': 'commerce',
+  'batch-bill-entry': 'commerce',
   'capture-upload': 'commerce',
   'card-name-cell': 'home',
   'card-studio': 'home',
