@@ -29,8 +29,7 @@
     "manageEnvironments": "Umgebungen verwalten",
     "keyboardShortcuts": "Tastenkürzel",
     "switchFailed": "Der Arbeitsbereich konnte nicht gewechselt werden. Versuchen Sie es erneut.",
-    "switchUnavailable": "Sie haben keinen Zugriff mehr auf diesen Arbeitsbereich.",
-    "dataEntry": "Datenerfassung"
+    "switchUnavailable": "Sie haben keinen Zugriff mehr auf diesen Arbeitsbereich."
   },
   "sandboxBanner": {
     "sandbox": "Sandbox-Umgebung",

@@ -27,10 +27,9 @@
     "workspace": "Espaço de trabalho",
     "production": "Produção",
     "manageEnvironments": "Gerenciar ambientes",
-    "keyboardShortcuts": "Atalhos de teclado",
+    "keyboardShortcuts": "Atalhos",
     "switchFailed": "Não foi possível trocar de espaço de trabalho. Tente novamente.",
-    "switchUnavailable": "Você não tem mais acesso a esse espaço de trabalho.",
-    "dataEntry": "Entrada de dados"
+    "switchUnavailable": "Você não tem mais acesso a esse espaço de trabalho."
   },
   "sandboxBanner": {
     "sandbox": "Ambiente de sandbox",

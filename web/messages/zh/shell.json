@@ -27,10 +27,9 @@
     "workspace": "工作区",
     "production": "生产环境",
     "manageEnvironments": "管理环境",
-    "keyboardShortcuts": "键盘快捷键",
+    "keyboardShortcuts": "快捷键",
     "switchFailed": "无法切换工作区，请重试。",
-    "switchUnavailable": "你已无权访问该工作区。",
-    "dataEntry": "数据录入"
+    "switchUnavailable": "你已无权访问该工作区。"
   },
   "sandboxBanner": {
     "sandbox": "沙盒环境",

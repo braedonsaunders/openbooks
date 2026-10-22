@@ -27,10 +27,9 @@
     "workspace": "ワークスペース",
     "production": "本番環境",
     "manageEnvironments": "環境を管理",
-    "keyboardShortcuts": "キーボードショートカット",
+    "keyboardShortcuts": "ショートカット",
     "switchFailed": "ワークスペースを切り替えられませんでした。もう一度お試しください。",
-    "switchUnavailable": "このワークスペースへのアクセス権がなくなりました。",
-    "dataEntry": "データ入力"
+    "switchUnavailable": "このワークスペースへのアクセス権がなくなりました。"
   },
   "sandboxBanner": {
     "sandbox": "サンドボックス環境",

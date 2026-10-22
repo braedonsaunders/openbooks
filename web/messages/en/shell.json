@@ -27,10 +27,9 @@
     "organizationWorkspaceDescription": "Modules for the current organization",
     "platformDescription": "Deployment-wide operator tools",
     "security": "Sign-in security",
-    "keyboardShortcuts": "Keyboard shortcuts",
+    "keyboardShortcuts": "Shortcuts",
     "switchFailed": "The workspace could not be switched. Try again.",
-    "switchUnavailable": "You no longer have access to that workspace.",
-    "dataEntry": "Data entry"
+    "switchUnavailable": "You no longer have access to that workspace."
   },
   "sandboxBanner": {
     "sandbox": "Sandbox environment",
