@@ -325,10 +325,11 @@ export async function loadBenefits(authz: Authz, sp: Record<string, string | und
 
   // Segment badges count every window: the selected segment filters only the
   // visible rows below, so Draft and Closed never read 0 beside a filtered list.
+  const needsEnrollmentData = portfolioView === 'overview' || showingEnrolments || Boolean(sp.window)
   const [windows, contributionText, enrolments] = await Promise.all([
-    listEnrollmentWindows(db, orgId, actorId),
+    needsEnrollmentData ? listEnrollmentWindows(db, orgId, actorId) : Promise.resolve([]),
     getTranslations('admin'),
-    listEnrollments(db, orgId, actorId),
+    needsEnrollmentData ? listEnrollments(db, orgId, actorId) : Promise.resolve([]),
   ])
   const { workerByEmployment } = await loadQueueLabels(
     orgId,
@@ -441,7 +442,7 @@ export async function loadBenefits(authz: Authz, sp: Record<string, string | und
       effectiveFrom: program.effectiveFrom, effectiveTo: program.effectiveTo,
       statusLabel: t.has(`portfolio.programStatus.${program.status}`) ? t(`portfolio.programStatus.${program.status}`) : t(`benefits.statusNames.${program.status}`),
       statusVariant: program.status === 'active' ? 'success' : program.status === 'draft' ? 'warning' : 'outline',
-      programHref: `${basePath}?view=programs&program=${encodeURIComponent(program.id)}`,
+      programHref: benefitsHref(basePath, sp.segment, { ...keepView, ...(sp.type ? { type: sp.type } : {}), ...(sp.status ? { status: sp.status } : {}), program: program.id }),
       lifecycle: program.status === 'active' || program.status === 'draft' ? 'current' : 'closed',
     })).filter(row => !type || row.family === type)
       // Current programs (active and draft) by default; closed history on request.

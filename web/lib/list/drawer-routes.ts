@@ -1,3 +1,4 @@
+import { BENEFITS_PROGRAM_DRAWER_PARAMS, isBenefitsProgramDrawerSelection } from '../hrm/benefits-drawer-route'
 import { isUuid } from '@openbooks/engine/platform/identifiers'
 
 /** Native list drawers use the same loaders and renderers as their full-page
@@ -35,6 +36,17 @@ export function isListDrawerHrefChange(currentHref: string, nextHref: string): b
   const current = new URL(currentHref, 'https://list.local')
   const next = new URL(nextHref, current)
   if (current.origin !== next.origin || current.pathname !== next.pathname) return false
+  if (current.pathname === '/hrm/benefits') {
+    const before = current.searchParams.get('program')
+    const after = next.searchParams.get('program')
+    if ((!before && !after) || before === 'new' || after === 'new') return false
+    if ((before && !isBenefitsProgramDrawerSelection(current.searchParams)) || (after && !isBenefitsProgramDrawerSelection(next.searchParams))) return false
+    for (const params of [current.searchParams, next.searchParams]) {
+      for (const key of BENEFITS_PROGRAM_DRAWER_PARAMS) params.delete(key)
+      params.sort()
+    }
+    return current.searchParams.toString() === next.searchParams.toString()
+  }
   if (current.pathname === '/property-management') {
     const changed = PROPERTY_MANAGEMENT_DRAWER_PARAMS.some(
       (key) => current.searchParams.get(key) !== next.searchParams.get(key),

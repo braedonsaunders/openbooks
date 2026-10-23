@@ -134,24 +134,7 @@ export function benefitsSpec(data: BenefitsData): PageSpec {
             },
             f('programBuilderOpen'),
           ),
-          widgetBlock(
-            'hrm-program-builder-edit',
-            {
-              closeHref: f('dialogCloseHref'),
-              canConfigureApprovalPolicies: f('canConfigureApprovalPolicies'),
-              programId: data.programEditSeed?.id ?? '',
-              editSeed: data.programEditSeed,
-              subsidiaryOptions: data.subsidiaryOptions,
-              departmentOptions: f('scopeDepartments'),
-              projectOptions: f('scopeProjects'),
-              customerOptions: f('scopeCustomers'),
-              payComponentOptions: f('payComponentOptions'),
-              accountOptions: f('accountOptions'),
-              currencyOptions: f('currencyOptions'),
-              employmentsTruncated: f('employmentsTruncated'),
-            },
-            f('programEditOpen'),
-          ),
+          ...benefitsProgramRecordBlocks(data),
           widgetBlock(
             'hrm-award-builder',
             {
@@ -161,16 +144,6 @@ export function benefitsSpec(data: BenefitsData): PageSpec {
               initialProgramId: data.programEditSeed?.id ?? data.programRows.find(row => row.programHref === data.dialogCloseHref)?.id,
             },
             f('awardBuilderOpen'),
-          ),
-          widgetBlock(
-            'hrm-program-drawer',
-            {
-              drawer: data.programDrawer,
-              closeHref: f('programCloseHref'),
-              canManage: f('canManage'),
-              employmentOptions: f('employmentOptions'),
-            },
-            f('programDrawer'),
           ),
           widgetBlock(
             'hrm-award-drawer',
@@ -200,4 +173,38 @@ export async function loadBenefitsPage(sp: Record<string, string | undefined>): 
 export async function benefitsTitle(): Promise<string> {
   const t = await getTranslations('hrm')
   return t('benefits.title')
+}
+
+/** The program host renders the same native record widgets independently of its list. */
+export function benefitsProgramRecordBlocks(data: BenefitsData) {
+  return [
+          widgetBlock(
+            'hrm-program-builder-edit',
+            {
+              closeHref: f('dialogCloseHref'),
+              canConfigureApprovalPolicies: f('canConfigureApprovalPolicies'),
+              programId: data.programEditSeed?.id ?? '',
+              editSeed: data.programEditSeed,
+              subsidiaryOptions: data.subsidiaryOptions,
+              departmentOptions: f('scopeDepartments'),
+              projectOptions: f('scopeProjects'),
+              customerOptions: f('scopeCustomers'),
+              payComponentOptions: f('payComponentOptions'),
+              accountOptions: f('accountOptions'),
+              currencyOptions: f('currencyOptions'),
+              employmentsTruncated: f('employmentsTruncated'),
+            },
+            f('programEditOpen'),
+          ),
+          widgetBlock(
+            'hrm-program-drawer',
+            {
+              drawer: data.programDrawer,
+              closeHref: f('programCloseHref'),
+              canManage: f('canManage'),
+              employmentOptions: f('employmentOptions'),
+            },
+            f('programDrawer'),
+          ),
+  ]
 }

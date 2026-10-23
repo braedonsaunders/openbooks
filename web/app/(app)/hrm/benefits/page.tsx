@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { SetupEntitySection } from '../../admin/setup/[entity]/SetupEntitySection'
 import { benefitPlanPresentation } from '../../../../lib/setup/hrm-benefits'
 import { benefitEntitlementPresentation } from '../../../../lib/setup/benefit-entitlements'
@@ -13,6 +14,8 @@ import { isUuid } from '../../../../lib/list-params'
 import { notFound } from 'next/navigation'
 import { ModuleView } from '../../../../components/viewspec/module-view'
 import { benefitsSpec, benefitsTitle, loadBenefitsPage } from './view'
+import { ProgramDrawerHost } from './ProgramDrawerHost'
+import { BENEFITS_PROGRAM_DRAWER_PARAMS, isBenefitsProgramDrawerSelection } from '../../../../lib/hrm/benefits-drawer-route'
 
 export const dynamic = 'force-dynamic'
 export async function generateMetadata() { return { title: await benefitsTitle() } }
@@ -27,9 +30,10 @@ export default async function BenefitsPage({ searchParams }: {searchParams: Prom
   if (sp.plan && (sp.plan !== 'new' || sp.kind !== 'health' && sp.kind !== 'retirement')) notFound()
   const authz = await requirePermission(nativeCreate ? 'hrm.benefits.manage' : 'hrm.benefits.read')
   await requireFeatureEnabled(authz.user.orgId,'hrm')
+  const asyncProgram = isBenefitsProgramDrawerSelection(new URLSearchParams(Object.entries(sp).filter((entry): entry is [string, string] => entry[1] !== undefined)))
   let workspace: BenefitsProgramWorkspace | null = null
   let programRefusal: string | null = null
-  if (sp.program && sp.program !== 'new') {
+  if (sp.program && sp.program !== 'new' && !asyncProgram) {
     if (!isUuid(sp.program)) notFound()
     const pageNumber = (key: string) => { const value=sp[key]; if (value && !/^[1-9]\d*$/.test(value)) notFound(); const parsed=Number(value ?? '1'); if (!Number.isSafeInteger(parsed) || !Number.isSafeInteger((parsed-1)*100)) notFound(); return parsed }
     try { workspace = await getBenefitsProgramWorkspace(db, authz.user.orgId, authz.user.id, sp.program, {participantOffset:(pageNumber('participantsPage')-1)*100,activityOffset:(pageNumber('activityPage')-1)*100}) }
@@ -37,10 +41,12 @@ export default async function BenefitsPage({ searchParams }: {searchParams: Prom
   }
   // Time-off entitlements accrue through Payroll; a switched-off Payroll names that remedy.
   if (workspace?.program.nativeKind === 'entitlement' || sp.kind === 'time_off') await requireFeatureEnabled(authz.user.orgId,'payroll')
-  const data = await loadBenefitsPage(sp)
+  const listParams = asyncProgram ? Object.fromEntries(Object.entries(sp).filter(([key]) => !(BENEFITS_PROGRAM_DRAWER_PARAMS as readonly string[]).includes(key))) : sp
+  const data = await loadBenefitsPage(listParams)
   if (programRefusal) { data.refusal={title:data.title,message:programRefusal}; data.hasContent=false }
   return <>
-    <ModuleView spec={benefitsSpec(data)} data={data} searchParams={sp} trusted />
+    <ModuleView spec={benefitsSpec(data)} data={data} searchParams={listParams} trusted />
+    <ProgramDrawerHost refreshKey={randomUUID()} />
     {sp.transactionRules ? <TransactionRulesDrawer authz={authz} programId={sp.transactionRules} /> : null}
     {workspace && workspace.program.nativeKind !== 'employer' ? <ProgramWorkspace authz={authz} workspace={workspace} sp={sp} /> : null}
     {nativeCreate ? <SetupEntitySection

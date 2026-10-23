@@ -33,3 +33,17 @@ test('property management drawers preserve the selected workspace and unrelated 
   assert.equal(isListDrawerHrefChange(list, '/property-management?tab=cam&view=default&form=property-default'), false)
   assert.equal(isListDrawerHrefChange(list, `${list}&sort=name`), false)
 })
+
+test('benefit program selection preserves the catalog filters and shallow navigation excludes creation and other workspaces', () => {
+  const base = '/hrm/benefits?view=programs&type=health&status=all'
+  const id = '00000000-0000-4000-8000-000000000042'
+  const selected = `${base}&program=${id}`
+  assert.equal(isListDrawerHrefChange(base, selected), true)
+  assert.equal(isListDrawerHrefChange(selected, base), true)
+  assert.equal(isListDrawerHrefChange(selected, `${selected}&setupTab=participants`), true)
+  assert.equal(isListDrawerHrefChange(selected, `${selected}&edit=1`), true)
+  assert.equal(isListDrawerHrefChange(selected, `/hrm/benefits?view=programs&type=reward&status=all&program=${id}`), false)
+  assert.equal(isListDrawerHrefChange(base, `${base}&program=new`), false)
+  assert.equal(isListDrawerHrefChange(base, `${base}&program=invalid`), false)
+  assert.equal(isListDrawerHrefChange(selected, `${selected}&award=new`), false)
+})

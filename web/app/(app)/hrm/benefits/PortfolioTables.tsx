@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import Link from 'next/link'
+import { ListDrawerLink } from '../../../../components/list-drawer-link'
 import { useTranslations } from 'next-intl'
 import { Badge } from '@openbooks/ui'
 import { PreparedPagedTable, type PreparedTableRow } from '../../../../components/prepared-paged-table'
@@ -28,13 +29,13 @@ function programCells(row: UnifiedProgramRow, effectiveRange: (from: string | nu
     id: row.id,
     searchText: `${row.code} ${row.name} ${row.familyLabel} ${row.statusLabel}`,
     cells: [
-      <Link
+      <ListDrawerLink
         key="name"
         href={row.programHref as never}
         className="font-medium text-teal-700 underline-offset-2 hover:underline dark:text-teal-300"
       >
         {row.name}
-      </Link>,
+      </ListDrawerLink>,
       row.familyLabel,
       <span key="value" className="tabular-nums">
         {row.valueLabel}

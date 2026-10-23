@@ -89,3 +89,45 @@ test('URL request phases retain one native shell, retry callback, close guard an
   assert.deepEqual(navigations, [closeHref])
   assert.equal(document.body.style.overflow, overflow)
 })
+
+test('server-composed record chrome adopts the existing async shell and retains native dismissal authority', async t => {
+  const { AsyncServerDrawer } = await import('./async-server-drawer')
+  const { UrlDrawer } = await import('@openbooks/ui')
+  const host = document.createElement('div')
+  document.body.append(host)
+  const root = createRoot(host)
+  const navigations: string[] = []
+  let allowed = false
+  t.after(async () => { await act(async () => root.unmount()); host.remove() })
+  const record = <UrlDrawer open openKey="record" title="Native program" closeHref="/hrm/benefits" beforeClose={() => allowed}
+    headerActions={<button>Native action</button>} footer={<span>Native footer</span>}><label>Native field<input defaultValue="Retained draft" /></label></UrlDrawer>
+  async function render(pending: boolean) {
+    await act(async () => {
+      root.render(<NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <DrawerNavigateContext.Provider value={href => navigations.push(href)}>
+          <AsyncServerDrawer open openKey="record" title="Loading program" closeHref="/hrm/benefits?view=programs&type=health" pending={pending}>
+            {record}
+          </AsyncServerDrawer>
+        </DrawerNavigateContext.Provider>
+      </NextIntlClientProvider>)
+      await tick()
+    })
+  }
+  await render(true)
+  const shell = document.querySelector('[role="dialog"]')
+  assert.ok(shell)
+  await render(false)
+  assert.equal(document.querySelectorAll('[role="dialog"]').length, 1)
+  assert.equal(document.querySelector('[role="dialog"]'), shell)
+  assert.match(shell.textContent ?? '', /Native program/)
+  assert.match(shell.textContent ?? '', /Native action/)
+  assert.match(shell.textContent ?? '', /Native footer/)
+  assert.equal(shell.querySelector('input')?.value, 'Retained draft')
+  await act(async () => { document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await tick() })
+  assert.deepEqual(navigations, [])
+  assert.equal(document.querySelector('[role="dialog"]'), shell)
+  allowed = true
+  await act(async () => { document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await tick() })
+  await waitForDismissal()
+  assert.deepEqual(navigations, ['/hrm/benefits?view=programs&type=health'])
+})

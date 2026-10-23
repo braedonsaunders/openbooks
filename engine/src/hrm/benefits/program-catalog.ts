@@ -141,8 +141,8 @@ export async function listBenefitsProgramActivity(exec: SqlExecutor, orgId: stri
     order by a.on_date desc,a.id limit ${limit} offset ${offset}`, 'objects');
 }
 
-/** One identity resolves the native record and scoped employee evidence in its program workspace. */
-export async function getBenefitsProgramWorkspace(exec: SqlExecutor, orgId: string, actorId: string, programId: string, query: { participantOffset?: number; activityOffset?: number } = {}): Promise<BenefitsProgramWorkspace> {
+/** Resolve the native configuration without loading participant or delivery history. */
+export async function resolveBenefitsProgram(exec: SqlExecutor, orgId: string, actorId: string, programId: string): Promise<Pick<BenefitsProgramWorkspace, 'program' | 'nativeRecord'>> {
   requireId(programId,'programId');
   const scope = await requireAggregateBenefitsRead(exec,orgId,actorId);
   const stored = (await exec.execute<BenefitsProgramCatalogRow & { nativeRecord: Record<string,unknown> }>(sql`
@@ -152,6 +152,12 @@ export async function getBenefitsProgramWorkspace(exec: SqlExecutor, orgId: stri
   if (!stored) throw new BenefitsError('NOT_FOUND','This program is unavailable in your organization or legal-entity scope; reopen Programs.');
   if (stored.nativeKind==='entitlement' && !(await orgFeatureEnabled(orgId,'payroll',exec))) throw new BenefitsError('REFUSED','Enable Payroll under Company Settings → Features to access entitlement programs; existing program history is preserved.');
   const {nativeRecord,...program} = stored;
+  return {program,nativeRecord};
+}
+
+/** One identity resolves the native record and scoped employee evidence in its program workspace. */
+export async function getBenefitsProgramWorkspace(exec: SqlExecutor, orgId: string, actorId: string, programId: string, query: { participantOffset?: number; activityOffset?: number } = {}): Promise<BenefitsProgramWorkspace> {
+  const {program,nativeRecord} = await resolveBenefitsProgram(exec,orgId,actorId,programId);
   const participants = await listBenefitsProgramParticipants(exec,orgId,actorId,{programId,limit:101,offset:query.participantOffset});
   const activity = await listBenefitsProgramActivity(exec,orgId,actorId,{programId,limit:101,offset:query.activityOffset});
   return {program,nativeRecord,participants:participants.slice(0,100),activity:activity.slice(0,100),hasMoreParticipants:participants.length>100,hasMoreActivity:activity.length>100};

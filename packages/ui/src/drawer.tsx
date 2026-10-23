@@ -613,31 +613,11 @@ export function Drawer({
  */
 export const DrawerNavigateContext = React.createContext<((href: string) => void) | null>(null)
 
-/**
- * URL-state drawer wrapper. `open` is derived from search params. Overlay
- * hosts (report drill) keep `open` true across target changes — pass
- * `openKey` so a new target remounts after the previous close animation.
- */
-export function UrlDrawer({
-  open,
-  openKey,
-  closeHref,
-  title,
-  description,
-  leading,
-  size,
-  children,
-  footer,
-  headerActions,
-  subtabs,
-  bodyClassName,
-  panelClassName,
-  stacked,
-  initialFullscreen,
-  contextualReturn = true,
-  beforeClose,
-  syncUrlOnClose = false,
-}: {
+/** A record renderer can supply chrome to an already-mounted async shell.
+ * Nested record drawers receive their own shell rather than replacing it. */
+export const UrlDrawerPresentationContext = React.createContext<((props: UrlDrawerProps | null) => void) | null>(null)
+
+export type UrlDrawerProps = {
   open: boolean
   /** Identity of the open target. Changing it while `open` stays true
    *  remounts the panel (second drill without a full page load). */
@@ -668,7 +648,46 @@ export function UrlDrawer({
    *  still re-runs the server after the animation; default false preserves
    *  the historic close-then-navigate timing everywhere else. */
   syncUrlOnClose?: boolean
-}) {
+}
+
+function HostedUrlDrawer({ presentation, ...props }: UrlDrawerProps & { presentation: (props: UrlDrawerProps | null) => void }) {
+  React.useLayoutEffect(() => {
+    presentation(props)
+    return () => presentation(null)
+  }, [presentation, props])
+  return <UrlDrawerPresentationContext.Provider value={null}>{props.children}</UrlDrawerPresentationContext.Provider>
+}
+
+/**
+ * URL-state drawer wrapper. `open` is derived from search params. Overlay
+ * hosts (report drill) keep `open` true across target changes — pass
+ * `openKey` so a new target remounts after the previous close animation.
+ */
+export function UrlDrawer(props: UrlDrawerProps) {
+  const presentation = React.useContext(UrlDrawerPresentationContext)
+  return presentation ? <HostedUrlDrawer {...props} presentation={presentation} /> : <StandaloneUrlDrawer {...props} />
+}
+
+function StandaloneUrlDrawer({
+  open,
+  openKey,
+  closeHref,
+  title,
+  description,
+  leading,
+  size,
+  children,
+  footer,
+  headerActions,
+  subtabs,
+  bodyClassName,
+  panelClassName,
+  stacked,
+  initialFullscreen,
+  contextualReturn = true,
+  beforeClose,
+  syncUrlOnClose = false,
+}: UrlDrawerProps) {
   const navigate = React.useContext(DrawerNavigateContext)
   // Derived from the address bar (an external store) plus props. Gated on
   // hydration so the server and the first client render agree on `null`, then

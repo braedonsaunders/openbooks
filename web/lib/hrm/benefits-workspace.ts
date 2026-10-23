@@ -23,6 +23,7 @@ import { can, type Authz } from '../authz'
 import {
   buildAttentionQueue,
   isProgramEditable,
+  parsePortfolioView,
   portfolioHref,
   totalsByCurrency,
   type BenefitPayComponentOption,
@@ -36,6 +37,7 @@ import { subsidiaryVisibleFilter } from '../subsidiaries'
 import { loadQueueLabels } from './change-requests'
 import { loadBenefitsReportLinks, type BenefitsReportLink } from './benefits-reports'
 import { isFeatureEnabled } from '../features'
+import { isUuid } from '@openbooks/engine/platform/identifiers'
 
 /**
  * Employer-defined program rules, participants, activity and payroll delivery. Programs and awards load through the
@@ -272,12 +274,15 @@ export async function loadBenefitsPortfolio(
 
   let programs: BenefitProgram[] = []
   let awards: BenefitAward[] = []
+  const view = parsePortfolioView(sp.view)
+  const needsAwards = view === 'overview' || view === 'delivery'
+    || Boolean(sp.program && sp.program !== 'new') || Boolean(sp.award && sp.award !== 'new')
   const [programsRefusal, awardsRefusal, { money }] = await Promise.all([
     serviceRefusal(t, async () => {
       programs = (await listBenefitPrograms({ orgId, actorId })).programs
     }),
     serviceRefusal(t, async () => {
-      awards = (await listBenefitAwards({ orgId, actorId })).awards
+      if (needsAwards) awards = (await listBenefitAwards({ orgId, actorId, ...(isUuid(sp.program ?? '') && !sp.award ? { programId: sp.program } : {}) })).awards
     }),
     getMoneyFormatter(orgId),
   ])
@@ -374,7 +379,7 @@ export async function loadBenefitsPortfolio(
   let reportLinks: PortfolioData['reportLinks'] = []
   let reportsRefusal: PortfolioData['reportsRefusal'] = null
   try {
-    reportLinks = (await loadBenefitsReportLinks(authz)).map((link) => ({
+    reportLinks = (view === 'overview' ? await loadBenefitsReportLinks(authz) : []).map((link) => ({
       ...link,
       label: t.has(`portfolio.reports.${link.key}`) ? t(`portfolio.reports.${link.key}`) : link.key,
     }))

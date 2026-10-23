@@ -40,14 +40,14 @@ stubModules({
         export async function benefitCurrencyOptions() { globalThis.__benefitsOptionReads.push('currencies'); if(globalThis.__benefitsOptionsError)throw new Error(globalThis.__benefitsOptionsError); return [{value: 'USD', label: 'USD · US Dollar', scopeValue: null}] }
         export async function listBenefitApprovalPolicies() { return { configured: false, href: '/admin/flows', policies: [] } }
         export async function listBenefitPrograms() { const s = globalThis.__portfolioReads; if (s?.programsError) throw new Error(s.programsError); return { programs: s?.programs ?? [] } }
-        export async function listBenefitAwards() { const s = globalThis.__portfolioReads; if (s?.awardsError) throw new Error(s.awardsError); return { awards: s?.awards ?? [] } }
+        export async function listBenefitAwards() { globalThis.__benefitsDataReads.push("awards"); const s = globalThis.__portfolioReads; if (s?.awardsError) throw new Error(s.awardsError); return { awards: s?.awards ?? [] } }
         export async function listProgramMemberships() { return [] }
         export async function listProgramSources() { const s = globalThis.__portfolioReads; if (s?.sourcesError) throw new Error(s.sourcesError); return s?.sources ?? [] }
         export async function reconcileIncentivePeriod() { throw new Error('Simulation was not requested') }
       `,
-    './benefits-reports': 'export async function loadBenefitsReportLinks() { return [] }',
+    './benefits-reports': 'export async function loadBenefitsReportLinks() { globalThis.__benefitsDataReads.push("reports"); return [] }',
     '@openbooks/engine/platform/business-date/module': "export async function businessToday() { return '2026-09-22'; } export function utcDateFromParts() { throw new Error('unstubbed'); }",
-    '@openbooks/engine/hrm/benefits/benefits-read': `export async function listEnrollmentWindows(db, orgId, actorId, filter) {
+    '@openbooks/engine/hrm/benefits/benefits-read': `export async function listEnrollmentWindows(db, orgId, actorId, filter) { globalThis.__benefitsDataReads.push("windows");
               const s = globalThis.__benefitsReads;
               const windows = (s && s.windows) || [];
               if (filter && filter.status) return windows.filter((w) => w.status === filter.status);
@@ -55,7 +55,7 @@ stubModules({
             }
             export async function listBenefitPlans() { return (globalThis.__benefitsReads?.catalogPlans) || []; }
             export async function listEnrollmentPlanOptions() { return (globalThis.__benefitsReads?.plans) || []; }
-            export async function listEnrollments() {
+            export async function listEnrollments() { globalThis.__benefitsDataReads.push("enrollments");
               const s = globalThis.__benefitsReads;
               return (s && s.enrolments) || [];
             }
@@ -85,6 +85,7 @@ gap.__benefitsExecute = (query: Parameters<PgDialect['sqlToQuery']>[0]) => {
 };
 beforeEach(() => {
   optionReads.length = 0;
+  gap.__benefitsDataReads = [];
   gap.__benefitsOptionsError = undefined;
   stubReads([], [])
   gap.__portfolioReads = undefined
@@ -368,6 +369,19 @@ test('Payouts contains only released delivery obligations and recorded payroll h
   assert.ok(!spec.includes('"label":"New reward"'))
   assert.ok(!spec.includes('"id":"draft"'))
   const rewards = await loadBenefits(HR_BENEFITS, { view: 'programs', type: 'reward' })
-  assert.ok(['draft', 'pending', 'rejected'].every((id) => rewards.rewardAwardRows.some((row) => row.id === id)))
+  assert.deepEqual(rewards.rewardAwardRows, [], 'the program catalog does not read unrelated award history')
+  const overview = await loadBenefits(HR_BENEFITS, {})
+  assert.ok(['draft', 'pending', 'rejected'].every((id) => overview.rewardAwardRows.some((row) => row.id === id)))
   assert.equal(payouts.overview.attention.find((item) => item.key === 'pending-awards')?.href, '/inbox')
+})
+
+
+test('Programs loads its catalog without enrollment populations, award history or overview reports', async () => {
+  gap.__portfolioReads = { programs: [], awardsError: 'Award history unavailable' }
+  const data = await loadBenefits(HR_BENEFITS, { view: 'programs' })
+  assert.equal(data.hasContent, true)
+  assert.equal(data.awardsRefusal, null)
+  assert.deepEqual(gap.__benefitsDataReads, [])
+  await loadBenefits(HR_BENEFITS, {})
+  assert.deepEqual(new Set(gap.__benefitsDataReads as string[]), new Set(['windows', 'enrollments', 'awards', 'reports']))
 })
