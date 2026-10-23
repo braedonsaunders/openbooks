@@ -9,7 +9,7 @@ export interface JournalInstructionLine {
 }
 
 /** Save, import preview and posting share non-monetary and instruction compatibility refusals. */
-export function validateJournalInstructionLines(mode:string,reverseOn:string|null,lines:readonly JournalInstructionLine[]):void {
+export function validateJournalInstructionLines(mode:string,reverseOn:string|null,lines:readonly JournalInstructionLine[],allowZeroMonetaryLines = false):void {
   for (const line of lines) {
     if (mode === "statistical") {
       const quantity = canonicalDecimal(canonicalDecimal(line.quantity, 8), 4);
@@ -17,7 +17,10 @@ export function validateJournalInstructionLines(mode:string,reverseOn:string|nul
         throw new JournalInstructionError(`Line ${line.line_number}: statistical journals require a statistical account, zero money and a nonzero exact quantity with a unit.`, "Choose the statistical account and enter its quantity and unit.");
       }
       if (line.template || line.journal_currency || line.journal_eliminate) throw new JournalInstructionError(`Line ${line.line_number}: a statistical measurement cannot also defer expense, translate currency or eliminate monetary balances.`, "Clear those financial instructions from the statistical line.");
-    } else if (line.type === "statistical" || toUnits(line.amount) === 0n) {
+    } else if (line.type === "statistical" || (toUnits(line.amount) === 0n && !(
+      allowZeroMonetaryLines && mode === "monetary" && !line.template &&
+      !line.journal_currency && !line.journal_fx_rate && !line.journal_eliminate
+    ))) {
       throw new JournalInstructionError(`Line ${line.line_number}: monetary journals require a monetary account and a nonzero amount.`, "Choose Monetary journal or a Statistical journal with quantity and unit.");
     }
     if (line.journal_fx_rate && (canonicalDecimal(line.journal_fx_rate,10) === null || compareDecimal(line.journal_fx_rate,"0")! <= 0)) {

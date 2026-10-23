@@ -24,3 +24,13 @@ test('a single non-monetary measurement is valid but an empty or one-sided monet
 test('an expense deferral and full scheduled reversal cannot both control the same source expense',()=>{
  assert.throws(()=>validateJournalInstructionLines('monetary','2026-08-01',[{...measurement,type:'expense',amount:'10',template:'expense-template'}]),JournalInstructionError);
 });
+test('posting can retain zero monetary source detail without accepting statistical accounts or financial instructions',()=>{
+ const detail:JournalInstructionLine={...measurement,type:'expense',quantity:'1',unit:null};
+ assert.doesNotThrow(()=>validateJournalInstructionLines('monetary',null,[detail],true));
+ assert.throws(()=>validateJournalInstructionLines('monetary',null,[detail]),JournalInstructionError);
+ for(const change of [{type:'statistical'},{template:'expense-template'},{journal_currency:'USD'},{journal_fx_rate:'1.25'},{journal_eliminate:true}]){
+  assert.throws(()=>validateJournalInstructionLines('monetary',null,[{...detail,...change}],true),JournalInstructionError);
+ }
+ assert.throws(()=>validateJournalInstructionLines('currency_adjustment',null,[detail],true),JournalInstructionError);
+ assert.throws(()=>assertFinalKernelBalance([{amount:'0',subsidiaryId:'entity'}]));
+});

@@ -154,9 +154,10 @@ export async function validateJournalInstructions(
   validateJournalInstructionLines(
     doc.journal_mode,
     doc.journal_reverse_on,
-    historicalReplay && doc.journal_mode === "monetary"
-      ? lines.filter((line) => toUnits(line.amount) !== 0n)
-      : lines,
+    lines,
+    // Imported documents retain zero-value source detail. Posting emits no
+    // monetary leg for it; account and instruction compatibility still apply.
+    posting,
   );
   const canonicalLines = await normalizeJournalCurrencyLines(
     runner,
