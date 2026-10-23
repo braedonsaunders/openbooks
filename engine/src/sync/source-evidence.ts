@@ -3,6 +3,7 @@ import {
   applySourceLineEvidence,
   refreshSourceReconciliationState,
   signOffFromSourceEvidence,
+  SYSTEM_ACTOR_ID,
   type SourceClearedEntryEvidence,
 } from "../banking/banking.ts";
 import { db } from "../platform/db.ts";
@@ -14,7 +15,7 @@ import type { MigrationSource, SourceClearedLineState } from "./source.ts";
  * documents carry cleared markers; connectors whose source tracks clearing
  * outside the transaction modification clock additionally expose a refresh
  * pull. This phase merges both (refresh wins), stamps the posted lines,
- * refreshes per-account state, and signs fully covered accounts off —
+ * refreshes per-account state, and lets authorized operators sign covered accounts off —
  * partially covered accounts stay open and reported. It never invents
  * statement lines and never amends documents: a clear-flip is evidence, not
  * content (see NativeDocLine).
@@ -177,6 +178,18 @@ export async function applySourceReconciliationEvidence(opts: {
   const states = await refreshSourceReconciliationState(orgId, connector);
   for (const state of states) {
     if (!state.reconciledThrough) continue;
+    // Scheduled imports carry clearing evidence without assuming a user's
+    // reconciliation authority. Sign-off remains an authorized native command.
+    if (actorId === SYSTEM_ACTOR_ID) {
+      outcome.skipped.push({
+        accountId: state.accountId,
+        throughDate: state.reconciledThrough,
+        clearedLines: state.clearedLines,
+        unclearedLines: state.unclearedLines,
+        reason: "operator-required",
+      });
+      continue;
+    }
     const signed = await signOffFromSourceEvidence(
       { accountId: state.accountId },
       // Sync-lane system sign-off: explicit unrestricted scope.
