@@ -3,7 +3,7 @@ import { decodeEntityMappings } from "./entity-mapping-contract.ts";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../platform/db.ts";
 import { unsealJson } from "../platform/secrets.ts";
-import type { NetSuiteCreds } from "../connectors/netsuite.ts";
+import { isNetSuiteAccountId, NETSUITE_ACCOUNT_ID_REFUSED, type NetSuiteCreds } from "../connectors/netsuite.ts";
 import { NetSuiteSource, parseNetSuiteMappings } from "./netsuite-source.ts";
 import { OdooSource } from "./odoo-source.ts";
 import type { OdooCreds } from "../connectors/odoo.ts";
@@ -310,6 +310,8 @@ export function validateSourceConfig(
     }
   }
   if (manifest.source === "netsuite") {
+    const account = String(config.account ?? "").trim();
+    if (account && !isNetSuiteAccountId(account)) return NETSUITE_ACCOUNT_ID_REFUSED;
     const accountingBookId = String(config.accountingBookId ?? "").trim();
     if (accountingBookId && !/^\d+$/.test(accountingBookId)) {
       return "Accounting book ID must be numeric";

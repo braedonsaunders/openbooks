@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createServer, type Server } from "node:http";
 import test from "node:test";
 import {
+  isNetSuiteAccountId,
   type NetSuiteCreds,
   netsuiteRecord,
   netsuiteRecords,
@@ -317,4 +318,20 @@ test("valid SuiteQL and SuiteTalk REST calls still succeed against a compliant o
     globalThis.fetch = originalFetch;
     await close(netsuite);
   }
+});
+
+test("a RESTlet call refuses an account ID that is not a NetSuite host label before any request", async () => {
+  let requests = 0;
+  const transport: typeof fetch = async () => {
+    requests++;
+    return Response.json({});
+  };
+  for (const account of ["evil.example.com/x?", "123456@attacker", "a b", "-123456", "123456_", "", "x".repeat(64)]) {
+    await assert.rejects(
+      netsuiteRestlet("customscript_x", "customdeploy_x", {}, { ...creds, account }, "GET", transport),
+      /NetSuite account ID must be/,
+    );
+  }
+  assert.equal(requests, 0);
+  for (const account of ["1234567", "1234567_SB1", "TSTDRV1234567"]) assert.equal(isNetSuiteAccountId(account), true);
 });

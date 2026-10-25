@@ -158,4 +158,6 @@ test("connection commands validate supported content and nested mappings through
     timeTypeRecord: "customrecord_time", timeTypeMultiplierField: "custrecord_multiplier", projectStatuses: { Complete: "closed" },
   } } }), null);
   assert.match(validateSourceConfig(netsuite, { ...NETSUITE_CONFIG, entityMappings: { version: 1, entities: {}, sourceOptions: { timeTypeMultiplierField: "custrecord_multiplier" } } }) ?? "", /requires timeTypeRecord/);
+  assert.match(validateSourceConfig(netsuite, { ...NETSUITE_CONFIG, account: "evil.example.com/x?" }) ?? "", /NetSuite account ID must be/);
+  assert.equal(validateSourceConfig(netsuite, { ...NETSUITE_CONFIG, account: "1234567_SB1" }), null);
 });

@@ -45,6 +45,20 @@ export function netsuiteCredsFromEnvFile(): NetSuiteCreds | null {
   };
 }
 
+/**
+ * NetSuite account IDs (`1234567`, `1234567_SB1`, `TSTDRV1234567`) become a
+ * DNS label in the RESTlet host, so anything outside that shape is refused
+ * rather than interpolated into a credentialed request URL.
+ */
+const NETSUITE_ACCOUNT_ID = /^[A-Za-z0-9](?:[A-Za-z0-9_-]{0,61}[A-Za-z0-9])?$/;
+
+export const NETSUITE_ACCOUNT_ID_REFUSED =
+  "NetSuite account ID must be letters, digits, underscores or hyphens (for example 1234567 or 1234567_SB1) — copy it from Setup → Company → Company Information";
+
+export function isNetSuiteAccountId(value: string): boolean {
+  return NETSUITE_ACCOUNT_ID.test(value);
+}
+
 const pct = (s: string | number) => encodeURIComponent(String(s)).replace(/[!'()*]/g, (c) => "%" + c.charCodeAt(0).toString(16).toUpperCase());
 
 /**
@@ -187,6 +201,7 @@ export async function netsuiteRestlet<T = unknown>(
   method: "GET" | "POST" = "GET",
   transport: typeof fetch = guardedFetch,
 ): Promise<T> {
+  if (!isNetSuiteAccountId(creds.account)) throw new Error(NETSUITE_ACCOUNT_ID_REFUSED);
   const accountHost = creds.account.replaceAll("_", "-").toLowerCase();
   const endpoint = `https://${accountHost}.restlets.api.netsuite.com/app/site/hosting/restlet.nl`;
   const query: Record<string, string | number> = { script, deploy };
