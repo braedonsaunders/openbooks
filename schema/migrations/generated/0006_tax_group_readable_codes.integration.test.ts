@@ -20,7 +20,7 @@ const migrationSql = readFileSync(
 
 async function addTaxCode(o: ScratchOrg, code: string, sourceId: string | null, kind: string | null): Promise<string> {
   const custom = kind
-    ? { nsId: sourceId, source: { system: "netsuite", externalId: sourceId }, sourceRecordKind: kind }
+    ? { nsId: sourceId, source: { system: "source-erp", externalId: sourceId }, sourceRecordKind: kind }
     : {};
   const rows = await db.execute<{ id: string }>(sql`
     insert into tax_codes (org_id, code, name, custom)
