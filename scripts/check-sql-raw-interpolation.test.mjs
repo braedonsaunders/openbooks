@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 import {
   checkTree,
+  discoverSources,
   scanSource,
 } from "./check-sql-raw-interpolation.mjs";
 
@@ -19,6 +24,25 @@ test("flags a value interpolated inside single quotes", () => {
   assert.equal(findings.length, 1);
   assert.equal(findings[0].fn, "sourceIdMap");
   assert.match(findings[0].arg, /org_id/);
+});
+
+test("discovery scans checkout-locally excluded sources but honors committed .gitignore", () => {
+  const root = mkdtempSync(join(tmpdir(), "sql-raw-discovery-"));
+  try {
+    const hidden = "engine/src/validation/hidden.ts"; // source-path: synthetic
+    const generated = "engine/src/generated/output.ts"; // source-path: synthetic
+    const kept = "engine/src/platform/kept.ts"; // source-path: synthetic
+    execFileSync("git", ["init", "-q"], { cwd: root });
+    for (const file of [hidden, generated, kept]) mkdirSync(join(root, file, ".."), { recursive: true });
+    writeFileSync(join(root, ".gitignore"), "engine/src/generated/\n");
+    writeFileSync(join(root, ".git/info/exclude"), "engine/src/validation/\n");
+    writeFileSync(join(root, hidden), VALUE_INTERPOLATION);
+    writeFileSync(join(root, generated), VALUE_INTERPOLATION);
+    writeFileSync(join(root, kept), "export const kept = 1;\n");
+    assert.deepEqual(discoverSources(root).sort(), [kept, hidden]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("flags a quoted list built by mapping over values", () => {

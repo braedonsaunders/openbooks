@@ -37,15 +37,22 @@ export function repoRoot() {
   return join(dirname(fileURLToPath(import.meta.url)), "..");
 }
 
-export function discoverSources() {
+/**
+ * Every source file in the working tree, tracked or not. Only the committed
+ * `.gitignore` files exclude anything: `--exclude-standard` would also honor
+ * the checkout-local `.git/info/exclude` and the user's global excludes, and a
+ * privately hidden script still runs against real databases — so it is
+ * scanned like any other source.
+ */
+export function discoverSources(root = repoRoot()) {
   return execFileSync(
     "git",
-    ["ls-files", "--cached", "--others", "--exclude-standard", "-z",
+    ["ls-files", "--cached", "--others", "--exclude-per-directory=.gitignore", "-z",
       "engine/src/**/*.ts", "engine/src/**/*.tsx",
       "web/**/*.ts", "web/**/*.tsx",
       "scripts/**/*.mjs",
       "packages/**/*.ts", "packages/**/*.tsx"],
-    { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
+    { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
   )
     .split("\0")
     .filter(Boolean)
