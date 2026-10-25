@@ -1600,6 +1600,7 @@
       "requestsEmpty": "Sin solicitudes pendientes",
       "requestsEmptyDescription": "Las propuestas que usted presenta aparecen aquí hasta su decisión.",
       "balancesTitle": "Saldos",
+      "availableLeaveLabel": "Permiso disponible",
       "balancesEmpty": "Sin tipos de ausencia activos.",
       "viewLeave": "Abrir ausencias",
       "extensionsTitle": "Más",

@@ -1600,6 +1600,7 @@
       "requestsEmpty": "暂无待处理申请",
       "requestsEmptyDescription": "您提交的提案在决定之前将显示在这里。",
       "balancesTitle": "余额",
+      "availableLeaveLabel": "可用假期",
       "balancesEmpty": "没有启用的休假类型。",
       "viewLeave": "打开休假",
       "extensionsTitle": "更多",

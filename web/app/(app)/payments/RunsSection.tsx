@@ -442,7 +442,7 @@ export async function RunsSection({
           pageParamKey="runsPage"
           perPageParamKey="runsPerPage"
           toolbarAfter={
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
               <SearchInput placeholder={t('runs.searchPlaceholder')} paramKey="runsQ" pageParamKey="runsPage" />
               <FilterChips
                 basePath={basePath}

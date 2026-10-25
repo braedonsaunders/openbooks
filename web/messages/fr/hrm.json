@@ -1600,6 +1600,7 @@
       "requestsEmpty": "Aucune demande en cours",
       "requestsEmptyDescription": "Les propositions que vous déposez figurent ici jusqu'à décision.",
       "balancesTitle": "Soldes",
+      "availableLeaveLabel": "Congés disponibles",
       "balancesEmpty": "Aucun type de congé actif.",
       "viewLeave": "Ouvrir les congés",
       "extensionsTitle": "Plus",

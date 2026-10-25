@@ -1239,6 +1239,7 @@
     "deactivated": "{name} deactivated",
     "reactivated": "{name} reactivated",
     "statusPending": "invite sent",
+    "statusInviteNotActive": "invite not sent or expired",
     "inviteButton": "Invite user",
     "inviteTitle": "Invite user",
     "inviteDescription": "They will receive an email with a link to set their password and sign in.",

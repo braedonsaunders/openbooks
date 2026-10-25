@@ -1600,6 +1600,7 @@
       "requestsEmpty": "No pending requests",
       "requestsEmptyDescription": "Profile and employment proposals you file list here until decided.",
       "balancesTitle": "Balances",
+      "availableLeaveLabel": "Available leave",
       "balancesEmpty": "No active leave types.",
       "viewLeave": "Open leave",
       "extensionsTitle": "More",

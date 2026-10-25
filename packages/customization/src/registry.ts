@@ -522,6 +522,13 @@ const JOURNAL: RecordTypeMeta = {
         ["book_opening", "bookOpening"],
         ["account_merge", "accountMerge"],
         ["equity", "equity"],
+        ["document", "document"], ["payroll", "payroll"], ["payroll_variance", "payrollVariance"],
+        ["overhead_applied", "overheadApplied"], ["disposal", "disposal"],
+        ["rebate_accrual", "rebateAccrual"], ["rebate_settlement", "rebateSettlement"],
+        ["revenue_accrual", "revenueAccrual"], ["inventory", "inventory"], ["manufacturing", "manufacturing"],
+        ["lease", "lease"], ["pledge", "pledge"], ["gift", "gift"], ["grant", "grant"], ["release", "release"],
+        ["intercompany", "intercompany"], ["fx_revaluation", "fxRevaluation"],
+        ["currency_adjustment", "currencyAdjustment"], ["tax_provision", "taxProvision"], ["pos", "pos"],
       ].map(([value, key]) => ({ value: value!, labelKey: `journal.origins.${key}` })),
     },
     {

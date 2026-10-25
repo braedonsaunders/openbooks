@@ -37,7 +37,7 @@ import type { ExplainPayTrace } from '@openbooks/engine/hrm/ai/explain-pay'
  * web app. Computed refusals travel as data: pages render them beside the
  * panels, never an empty workspace pretending the person has no record.
  *
- * EXTENSION POINT (HR-7 reviews, HR-8 benefits): SELF_SERVICE_EXTENSIONS
+ * EXTENSION POINT (reviews, benefits): SELF_SERVICE_EXTENSIONS
  * below is the rail the /me overview fills from. A new person-scoped
  * section appends one entry here (href, hrm-namespace label
  * key, icon key) and the loader resolves it into a DirectoryItem — never a
@@ -112,14 +112,13 @@ export async function meTabs(authz: Authz, activeHref: string): Promise<ModuleHo
   if (activeHref === '/me/one-on-ones' || (await mePerformanceOn(authz.user.orgId))) {
     tabs.push({ href: '/me/one-on-ones', label: t('me.tabs.oneOnOnes'), active: activeHref === '/me/one-on-ones' })
   }
-  // HR-12 begin: the Compensation tab shows only when the feature is on
+  // the Compensation tab shows only when the feature is on
   // and the person has something to see (a band or a statement) — the
   // page itself re-checks and 404s otherwise.
   if (activeHref === '/me/compensation' || (await meHasCompensation(authz))) {
     tabs.push({ href: '/me/compensation', label: t('me.tabs.compensation'), active: activeHref === '/me/compensation' })
   }
-  // HR-12 end
-  // HR-19 begin: Documents and Open surveys tabs — feature-gated, and
+  // Documents and Open surveys tabs — feature-gated, and
   // shown only when the person has something to see (own documents /
   // open invitations). The pages re-check and 404 otherwise. Read
   // failures resolve to false (the tab hides) rather than denying the
@@ -130,7 +129,6 @@ export async function meTabs(authz: Authz, activeHref: string): Promise<ModuleHo
   if (activeHref === '/me/surveys' || (await meHasSurveys(authz))) {
     tabs.push({ href: '/me/surveys', label: t('me.tabs.openSurveys'), active: activeHref === '/me/surveys' })
   }
-  // HR-19 end
   return tabs
 }
 
@@ -139,7 +137,7 @@ export interface MeRefusal {
   message: string
 }
 
-// HR-12 begin: Me Compensation tab visibility — the person has a band
+// Me Compensation tab visibility — the person has a band
 // (an architected position with a covering band) or a statement. Read
 // failures resolve to false (the tab hides) rather than denying the
 // whole Me strip.
@@ -154,9 +152,8 @@ async function meHasCompensation(authz: Authz): Promise<boolean> {
     return false
   }
 }
-// HR-12 end
 
-// HR-19 begin: Me Documents / Open surveys tab visibility — the person
+// Me Documents / Open surveys tab visibility — the person
 // holds own documents (or an export) / open invitations behind the
 // feature switch. Read failures resolve to false (the tab hides)
 // rather than denying the whole Me strip.
@@ -191,7 +188,6 @@ async function meHasSurveys(authz: Authz): Promise<boolean> {
     return false
   }
 }
-// HR-19 end
 
 // The Performance switch behind the Me 1:1s tab, the team roster's 1:1
 // column and its per-report praise action. Read failures resolve to false
@@ -332,14 +328,13 @@ export interface MeOverviewData {
   availableLeaveLabel?: string
   balances: MyLeaveBalance[]
   balancesEmpty: string
-  // HR-14 begin: the viewer's own certifications needing action.
+  // the viewer's own certifications needing action.
   qualificationsTitle: string
   qualifications: MeQualificationRow[];
   qualificationsState: "loaded" | "disabled" | "unavailable";
   qualificationsEmpty: string
   qualificationsEmptyDescription: string
   qualificationsColumns: { type: string; expires: string; status: string }
-  // HR-14 end
   timeKindLabel: string
   valueKindLabel: string
   unlimitedLabel: string
@@ -351,11 +346,11 @@ export interface MeOverviewData {
   hasExtensions: boolean
   profileHref: string
   editProfile: string
-  // HR-21 begin: own payslips with the Explain drawer. Optional so older
+  // own payslips with the Explain drawer. Optional so older
   // loaders keep compiling; the Me page fills it from the AI rails loader.
   hasPay?: boolean
   payTitle?: string
-  payStubs?: { id: string; payDate: string; gross: string; netPay: string; explainLabel: string; explainHref: string }[]
+  payStubs?: { id: string; payDate: string; gross: string; netPay: string; grossText: string; netPayText: string; explainLabel: string; explainHref: string }[]
   payColumns?: { payDate: string; gross: string; netPay: string }
   payEmpty?: string
   payExplain?: {
@@ -378,7 +373,6 @@ export interface MeOverviewData {
     cappedNoteTemplate: string
     trace: ExplainPayTrace | null
   } | null
-  // HR-21 end
 }
 
 function stepRows(t: Catalog, steps: MyStep[]): MeStepRow[] {
@@ -404,7 +398,7 @@ function requestRows(t: Catalog, requests: MyRequest[]): MeRequestRow[] {
   }))
 }
 
-// HR-14 begin: the viewer's own certifications needing action —
+// the viewer's own certifications needing action —
 // expiring or expired rows across their employments, newest lapse
 // first. Status labels resolve from the shared qualification catalog,
 // never inline English.
@@ -420,7 +414,6 @@ function qualificationVariant(status: string): StatusVariant {
   if (status === 'expired') return 'destructive'
   return 'warning'
 }
-// HR-14 end
 
 /** The Me overview: employment summary, open steps, pending requests,
  * balances, and the extension rail. Leave details ride the shared
@@ -457,7 +450,6 @@ export async function loadMeOverview(authz: Authz): Promise<MeOverviewData> {
     balancesTitle: t('me.overview.balancesTitle'),
     availableLeaveLabel: t('me.overview.availableLeaveLabel'),
     balancesEmpty: t('me.overview.balancesEmpty'),
-    // HR-14 begin
     qualificationsTitle: t('me.overview.qualificationsTitle'),
     qualificationsEmpty: t('me.overview.qualificationsEmpty'),
     qualificationsEmptyDescription: t('me.overview.qualificationsEmptyDescription'),
@@ -466,7 +458,6 @@ export async function loadMeOverview(authz: Authz): Promise<MeOverviewData> {
       expires: t('me.qualifications.columns.expires'),
       status: t('me.qualifications.columns.status'),
     },
-    // HR-14 end
     timeKindLabel: t('myLeave.timeKind'),
     valueKindLabel: t('myLeave.valueKind'),
     unlimitedLabel: t('myLeave.unlimited'),
@@ -1066,11 +1057,10 @@ export async function loadMeTeam(authz: Authz): Promise<MeTeamData> {
       oneOnOne: t('me.team.columns.oneOnOne'),
       feedback: t('me.team.columns.feedback'),
     },
-    // HR-17 begin: the roster's 1:1 column and per-report praise action
+    // the roster's 1:1 column and per-report praise action
     // render only while their switches are on — rows never promise a
     // surface that 404s. Resolved beside the roster below.
     continuousOn: false,
-    // HR-17 end
     rosterEmpty: t('me.team.rosterEmpty'),
     stepsTitle: t('me.team.stepsTitle'),
     stepsColumns: {

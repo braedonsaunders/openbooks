@@ -4,6 +4,7 @@ import { sql, type SQL } from 'drizzle-orm'
 import { getLocale, getTranslations } from 'next-intl/server'
 import { displayRoleDescription } from '../../../../lib/role-display'
 import { db } from '@openbooks/engine/platform/db'
+import { UNUSABLE_PASSWORD_HASH } from '@openbooks/engine/organization/pending-credential'
 import { grid, page, pageHeader, pagination, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../lib/authz'
 import { dateTime } from '../../../../lib/format'
@@ -117,14 +118,18 @@ export async function loadAdminUsers(
       is_active: boolean
       last_login_at: string | null
       is_pending: boolean
+      invite_live: boolean
       party_id: string | null
       party_name: string | null
       party_kind: string | null
     }>(sql`
       select u.id, u.name, u.email, u.is_active, u.last_login_at,
-             (u.is_active and u.last_login_at is null
-              and exists (select 1 from auth_password_resets r
-                           where r.user_id = u.id and r.used_at is null and r.expires_at > now())) as is_pending,
+             -- Pending means the person has never set a password, the same rule
+             -- the resend action enforces, so an expired link never hides the
+             -- invitation or its resend.
+             (u.is_active and u.password_hash = ${UNUSABLE_PASSWORD_HASH}) as is_pending,
+             exists (select 1 from auth_password_resets r
+                      where r.user_id = u.id and r.used_at is null and r.expires_at > now()) as invite_live,
              u.party_id, p.display_name as party_name, p.kind as party_kind
         from users u
         left join parties p on p.id = u.party_id and p.org_id = u.org_id
@@ -192,7 +197,7 @@ export async function loadAdminUsers(
       selfLinkAllowed: u.id === authz.user.id && soleAdministrator,
       isPending: u.is_pending,
       statusLabel: u.is_pending
-        ? t('statusPending')
+        ? t(u.invite_live ? 'statusPending' : 'statusInviteNotActive')
         : u.is_active
           ? t('statusActive')
           : t('statusInactive'),

@@ -23,6 +23,7 @@ import { getMoneyFormatter } from '@/lib/money-server'
 import { cmp, mulDecimal } from '@openbooks/engine/money/money'
 import { customerGroupTabs } from '../../../components/module-home/group-tabs'
 import type { DirectoryItem } from '../../../components/module-home/ui'
+import { toChartNumber } from '../../../lib/chart-number'
 
 /**
  * The customers cockpit, split into a loader and a spec.
@@ -305,7 +306,7 @@ export async function loadCustomers(
     trendLabels: data.trend.map((w) => weekLabel(w.weekStart, locale)),
     // Chart coordinates are a bounded visual projection only. All monetary
     // aggregation, ranking, and text formatting above retain exact decimals.
-    trendSeries: [{ name: t('home.trend.series'), data: data.trend.map((w) => chartMoneyCoordinate(w.collected)), color: '#10b981' }],
+    trendSeries: [{ name: t('home.trend.series'), data: data.trend.map((w) => toChartNumber(w.collected)), color: '#10b981' }],
     directoryTitle: t('home.directory.title'),
     directory,
     attentionTitle: t('home.attention.title'),
@@ -315,12 +316,6 @@ export async function loadCustomers(
 }
 
 type T = Awaited<ReturnType<typeof getTranslations<'customers'>>>
-
-function chartMoneyCoordinate(amount: string): number {
-  const limit = Number.MAX_SAFE_INTEGER
-  const value = Number(amount)
-  return Number.isFinite(value) ? Math.max(-limit, Math.min(limit, value)) : value < 0 ? -limit : limit
-}
 
 export function needsAttention(
   exposure: CustomerExposureRow[],

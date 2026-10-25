@@ -1600,6 +1600,7 @@
       "requestsEmpty": "Keine offenen Anfragen",
       "requestsEmptyDescription": "Eingereichte Profil- und Anstellungsvorschläge stehen hier bis zur Entscheidung.",
       "balancesTitle": "Salden",
+      "availableLeaveLabel": "Verfügbarer Urlaub",
       "balancesEmpty": "Keine aktiven Urlaubsarten.",
       "viewLeave": "Urlaub öffnen",
       "extensionsTitle": "Mehr",

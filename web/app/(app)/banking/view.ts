@@ -18,7 +18,8 @@ import { requirePermission, can } from '../../../lib/authz'
 import { resolveNav } from '../../../lib/nav/resolve'
 import { reportSubsidiaryScope, reportSubsidiaryView } from '../../../lib/consolidation'
 import { resolveAsOf } from '../../../lib/cash/core'
-import { bankingHome, boundedChartCoordinates, type BankingAccountRow } from '../../../lib/module-home/banking'
+import { bankingHome, type BankingAccountRow } from '../../../lib/module-home/banking'
+import { toChartNumber } from '../../../lib/chart-number'
 import { cmp } from '@openbooks/engine/money/money'
 import { MissingRatesError, type RatesBlockedNotice } from '../../../lib/consolidation'
 import { userPageLayout } from '../../../lib/page-layout'
@@ -281,7 +282,9 @@ export async function loadBanking(
     trendHint: t('home.trend.hint'),
     trendSeriesName: t('home.trend.series'),
     trendLabels: data.trend.map((w) => trendWeekLabel(w.weekStart, locale)),
-    trendData: boundedChartCoordinates(data.trend.map((w) => w.balance)),
+    // Real balances, so the money axis labels read as amounts; sparklines
+    // without an axis keep their normalized coordinates.
+    trendData: data.trend.map((w) => toChartNumber(w.balance)),
     directoryTitle: t('home.directory.title'),
     directory,
     attentionTitle: t('home.attention.title'),

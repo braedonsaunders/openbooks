@@ -1255,6 +1255,7 @@
     "deactivated": "{name} deaktiviert",
     "reactivated": "{name} reaktiviert",
     "statusPending": "eingeladen",
+    "statusInviteNotActive": "Einladung nicht gesendet oder abgelaufen",
     "inviteButton": "Benutzer einladen",
     "inviteTitle": "Benutzer einladen",
     "inviteDescription": "Diese Person erhält eine E-Mail mit einem Link, um ein Passwort festzulegen und sich anzumelden.",

@@ -1256,6 +1256,7 @@
     "deactivated": "{name} 已停用",
     "reactivated": "{name} 已重新激活",
     "statusPending": "已邀请",
+    "statusInviteNotActive": "邀请未发送或已过期",
     "inviteButton": "邀请用户",
     "inviteTitle": "邀请用户",
     "inviteDescription": "对方将收到一封电子邮件，其中包含设置密码并登录的链接。",

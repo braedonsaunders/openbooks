@@ -1255,6 +1255,7 @@
     "deactivated": "{name} を無効化しました",
     "reactivated": "{name} を再有効化しました",
     "statusPending": "招待中",
+    "statusInviteNotActive": "招待未送信または期限切れ",
     "inviteButton": "ユーザーを招待",
     "inviteTitle": "ユーザーを招待",
     "inviteDescription": "パスワードを設定してサインインするためのリンクを記載したメールが送信されます。",

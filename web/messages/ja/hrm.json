@@ -1600,6 +1600,7 @@
       "requestsEmpty": "処理中の申請はありません",
       "requestsEmptyDescription": "あなたが提出した提案は決定までここに表示されます。",
       "balancesTitle": "残高",
+      "availableLeaveLabel": "取得可能な休暇",
       "balancesEmpty": "有効な休暇種別がありません。",
       "viewLeave": "休暇を開く",
       "extensionsTitle": "その他",

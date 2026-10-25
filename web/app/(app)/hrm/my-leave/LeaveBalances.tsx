@@ -1,11 +1,15 @@
 'use client'
 
+import { canonicalDecimal } from '@openbooks/engine/money/decimal'
+import { useMoney } from '@/components/money-provider'
+
 /**
  * Self-service balance list: TIME balances per leave type and, where banks
  * exist, VALUE balances per plan — each labelled with its unit so the two
  * are never conflated. Time rows carry the entitlement breakdown
  * (entitlement, taken, pending, remaining) priced by the same engine the
- * filing gate uses. Loader-resolved rows; no fetch, no state.
+ * filing gate uses. Loader-resolved rows; no fetch, no state. Time figures
+ * read as plain hours and value banks as money in the organization currency.
  */
 
 export function LeaveBalances({
@@ -43,6 +47,10 @@ export function LeaveBalances({
   serviceStartUnknownLabel?: string
   empty: string
 }) {
+  const { money } = useMoney()
+  const hours = (value: string | null) => (value == null ? '—' : canonicalDecimal(value) ?? value)
+  const amount = (row: { kind: 'time' | 'value' }, value: string | null) =>
+    value == null ? '—' : row.kind === 'value' ? money(value) : hours(value)
   if (balances.length === 0) {
     return <p className="px-4 py-6 text-center text-sm text-slate-500 dark:text-slate-400">{empty}</p>
   }
@@ -61,8 +69,8 @@ export function LeaveBalances({
             <span className="block text-xs font-normal text-slate-400 dark:text-slate-500">{row.scopeLabel}</span>
             {row.kind === 'time' ? (
               <span className="block text-xs font-normal tabular-nums text-slate-400 dark:text-slate-500">
-                {entitlementLabel} {row.entitlement ?? '—'} · {takenLabel} {row.taken ?? '—'} ·{' '}
-                {pendingLabel} {row.pending ?? '—'} · {remainingLabel} {row.remaining ?? '—'}
+                {entitlementLabel} {hours(row.entitlement)} · {takenLabel} {hours(row.taken)} ·{' '}
+                {pendingLabel} {hours(row.pending)} · {remainingLabel} {hours(row.remaining)}
               </span>
             ) : null}
             {row.kind === 'time' && row.serviceStartUnknown && serviceStartUnknownLabel ? (
@@ -72,7 +80,7 @@ export function LeaveBalances({
             ) : null}
           </span>
           <span className="tabular-nums text-slate-500 dark:text-slate-400">
-            {row.unlimited ? unlimitedLabel : (row.balance ?? '—')}
+            {row.unlimited ? unlimitedLabel : amount(row, row.balance)}
           </span>
         </li>
       ))}

@@ -1600,6 +1600,7 @@
       "requestsEmpty": "Sem solicitações pendentes",
       "requestsEmptyDescription": "As propostas que você apresenta aparecem aqui até a decisão.",
       "balancesTitle": "Saldos",
+      "availableLeaveLabel": "Licença disponível",
       "balancesEmpty": "Sem tipos de licença ativos.",
       "viewLeave": "Abrir licenças",
       "extensionsTitle": "Mais",

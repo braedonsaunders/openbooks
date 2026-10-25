@@ -12,6 +12,7 @@ import { actorPartyOf } from '@openbooks/engine/hrm/self-service/actor'
 import { can, type Authz } from '../authz'
 import { isFeatureEnabled } from '../features'
 import { groupTabs } from '../../components/module-home/group-tabs'
+import { getMoneyFormatter } from '../money-server'
 
 /**
  * Workforce assistance web loaders. Pages stay thin: every loader resolves
@@ -272,26 +273,28 @@ export interface OwnStubRow {
   payDate: string;
   gross: string;
   netPay: string;
+  currency: string;
 }
 
 /** The actor's own calculated stubs, newest first. */
 export async function loadOwnStubs(authz: Authz): Promise<OwnStubRow[]> {
   const partyId = await actorPartyOf(db, authz.user.orgId, authz.user.id);
   if (!partyId) return [];
-  const rows = await db.execute<{ id: string; payDate: string; gross: string; netPay: string }>(sql`
+  const rows = await db.execute<{ id: string; payDate: string; gross: string; netPay: string; currency: string }>(sql`
     select id::text as id, pay_date::text as "payDate",
-           gross::text as gross, net_pay::text as "netPay"
+           gross::text as gross, net_pay::text as "netPay", currency_code as currency
       from pay_stubs
      where org_id = ${authz.user.orgId} and employee_party_id = ${partyId}
      order by pay_date desc, id desc
      limit 6`, 'objects');
-  return rows.map((row) => ({ id: row.id, payDate: row.payDate, gross: row.gross, netPay: row.netPay }));
+  return rows.map((row) => ({ id: row.id, payDate: row.payDate, gross: row.gross, netPay: row.netPay, currency: row.currency }));
 }
 
 export interface MePaySection {
   hasPay: boolean;
   payTitle: string;
-  payStubs: { id: string; payDate: string; gross: string; netPay: string; explainLabel: string; explainHref: string }[];
+  /** Amounts stay exact decimals; the `*Text` fields are the viewer-formatted money in the stub's currency. */
+  payStubs: { id: string; payDate: string; gross: string; netPay: string; grossText: string; netPayText: string; explainLabel: string; explainHref: string }[];
   payColumns: { payDate: string; gross: string; netPay: string };
   payEmpty: string;
   payExplain: {
@@ -342,6 +345,7 @@ export async function loadMePaySection(
     };
   }
   const stubs = await loadOwnStubs(authz);
+  const formatter = await getMoneyFormatter(authz.user.orgId);
   let payExplain: MePaySection['payExplain'] = null;
   if (explainStubId) {
     const found = stubs.find((s) => s.id === explainStubId) ?? null;
@@ -397,6 +401,8 @@ export async function loadMePaySection(
     payTitle: t('me.pay.title'),
     payStubs: stubs.map((s) => ({
       ...s,
+      grossText: formatter.money(s.gross, { currency: s.currency }),
+      netPayText: formatter.money(s.netPay, { currency: s.currency }),
       explainLabel: t('me.pay.explain'),
       explainHref: `/me?explain=${s.id}`,
     })),

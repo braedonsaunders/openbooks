@@ -48,7 +48,7 @@ export function meSpec(data: MeOverviewData): PageSpec {
     ? data.timeKindLabel
     : data.balancesEmpty
   const latestPay = data.payStubs?.[0]
-  const latestPayValue = latestPay?.netPay ?? data.notAvailableLabel ?? '—'
+  const latestPayValue = latestPay?.netPayText ?? data.notAvailableLabel ?? '—'
   const compensationLabel = data.tabs.find((tab) => tab.href === '/me/compensation')?.label ?? data.payTitle ?? ''
   return page({
     route: '/me',
@@ -134,7 +134,7 @@ export function meSpec(data: MeOverviewData): PageSpec {
                 className: 'shrink-0',
                 when: f('hasPay'),
                 blocks: [
-                  textBlock(latestPay ? `${data.payColumns?.payDate ?? ''}: ${latestPay.payDate} · ${data.payColumns?.netPay ?? ''}: ${latestPay.netPay}` : data.payEmpty ?? ''),
+                  textBlock(latestPay ? `${data.payColumns?.payDate ?? ''}: ${latestPay.payDate} · ${data.payColumns?.netPay ?? ''}: ${latestPay.netPayText}` : data.payEmpty ?? ''),
                   ...(latestPay ? [
                     widgetBlock('link-button', { href: latestPay.explainHref, label: latestPay.explainLabel, variant: 'outline' }),
                     widgetBlock('link-button', { href: '/me/compensation', label: compensationLabel, variant: 'outline' }),
@@ -171,7 +171,7 @@ export async function loadMePage(sp?: Record<string, string | undefined>): Promi
   const authz = await requirePermission('hrm.self.read')
   await requireFeatureEnabled(authz.user.orgId, 'hrm')
   const overview = await loadMeOverview(authz)
-  // HR-21: own payslips with the Explain drawer (?explain=<stubId>). The
+  // Own payslips with the Explain drawer (?explain=<stubId>). The
   // stubs resolve through the same person link, so an unlinked login
   // refuses here too — convert only NO_LINK to the refusal state through
   // the shared mechanism (same as the clock); everything else still
