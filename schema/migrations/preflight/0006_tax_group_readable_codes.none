@@ -1,0 +1,1 @@
+Renames only tax-group codes carrying their own source id suffix to a free readable code; the rename checks uniqueness itself and refuses a mismatched suffix by name, so no separate preflight is needed.
