@@ -10,6 +10,11 @@
     "customize": "カスタマイズ",
     "description": "日々の業務、財務概要、ショートカットを確認できます。"
   },
+  "emptyStates": {
+    "approvals": "承認待ちの項目はありません。",
+    "inProgress": "未完了の下書きはありません。作成途中で下書きのままにした記録がここに表示されます。",
+    "recentEntries": "まだ転記された仕訳はありません。"
+  },
   "widgets": {
     "operatingExpenses": "営業費用",
     "journalLines": "仕訳明細",

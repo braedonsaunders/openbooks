@@ -10,6 +10,11 @@
     "customize": "Customize",
     "description": "Your daily work, financial overview, and shortcuts."
   },
+  "emptyStates": {
+    "approvals": "Nothing is waiting for your approval.",
+    "inProgress": "No unfinished drafts. Records you start and leave in draft appear here.",
+    "recentEntries": "No ledger entries have been posted yet."
+  },
   "widgets": {
     "operatingExpenses": "Operating expenses",
     "journalLines": "Journal lines",

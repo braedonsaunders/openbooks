@@ -1,6 +1,6 @@
 'use client'
 
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { ArrowUpRight } from 'lucide-react'
 import { metricTilePack, packsEqual } from './_metric-tile-density'
@@ -161,10 +161,11 @@ export function MetricTile({
   return <div className={shell}>{inner}</div>
 }
 
-export function EmptyRow() {
+/** An empty card's body: what the card would list, said plainly; a bare dash where no statement fits. */
+export function EmptyRow({ children }: { children?: ReactNode }) {
   return (
-    <div className="flex h-full items-center justify-center py-6 text-sm text-slate-400 dark:text-slate-500">
-      —
+    <div className="flex h-full items-center justify-center px-6 py-6 text-center text-sm text-slate-500 dark:text-slate-400">
+      {children ?? '—'}
     </div>
   )
 }

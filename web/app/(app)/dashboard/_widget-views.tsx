@@ -482,7 +482,7 @@ function RecentEntriesList({
   if (entries.length === 0) {
     return (
       <CardShell title={t('widgets.recentEntries')} icon={<NotebookPen size={14} />}>
-        <EmptyRow />
+        <EmptyRow>{t('emptyStates.recentEntries')}</EmptyRow>
       </CardShell>
     )
   }
@@ -548,7 +548,7 @@ function PendingApprovalsList({
   if (approvals.length === 0) {
     return (
       <CardShell title={title ?? t('widgets.pendingApprovalsList')} icon={<ClipboardList size={14} />}>
-        <EmptyRow />
+        <EmptyRow>{t('emptyStates.approvals')}</EmptyRow>
       </CardShell>
     )
   }
@@ -750,7 +750,7 @@ function InProgressList({
   if (documents.length === 0) {
     return (
       <CardShell title={t('widgets.inProgress')} icon={<FileText size={14} />}>
-        <EmptyRow />
+        <EmptyRow>{t('emptyStates.inProgress')}</EmptyRow>
       </CardShell>
     )
   }

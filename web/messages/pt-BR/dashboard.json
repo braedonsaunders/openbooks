@@ -10,6 +10,11 @@
     "customize": "Personalizar",
     "description": "Seu trabalho diário, visão financeira e atalhos."
   },
+  "emptyStates": {
+    "approvals": "Nada aguarda a sua aprovação.",
+    "inProgress": "Nenhum rascunho inacabado. Os registros que você começar e deixar em rascunho aparecem aqui.",
+    "recentEntries": "Nenhum lançamento foi contabilizado ainda."
+  },
   "widgets": {
     "operatingExpenses": "Despesas operacionais",
     "journalLines": "Linhas de lançamento",

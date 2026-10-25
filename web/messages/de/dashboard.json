@@ -10,6 +10,11 @@
     "customize": "Anpassen",
     "description": "Ihre tägliche Arbeit, Finanzübersicht und Schnellzugriffe."
   },
+  "emptyStates": {
+    "approvals": "Es wartet nichts auf Ihre Genehmigung.",
+    "inProgress": "Keine offenen Entwürfe. Datensätze, die Sie beginnen und als Entwurf lassen, erscheinen hier.",
+    "recentEntries": "Es wurden noch keine Buchungen gebucht."
+  },
   "widgets": {
     "operatingExpenses": "Betriebsaufwendungen",
     "journalLines": "Journalzeilen",

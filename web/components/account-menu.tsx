@@ -42,7 +42,9 @@ function initialsFrom(name: string, email: string): string {
   const base = (name.trim() || email.trim()).trim()
   if (!base) return '?'
   const ordered = base.includes(',') ? base.split(',').reverse().join(' ') : base
-  const parts = ordered.split(/\s+/).filter(Boolean)
+  // Only words that start with a letter or digit count, so a parenthetical or
+  // punctuation ("Dana Lee (contractor)") never becomes an initial.
+  const parts = ordered.split(/\s+/).filter((part) => /^[\p{L}\p{N}]/u.test(part))
   if (parts.length === 0) return base.slice(0, 1).toUpperCase()
   if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase()
   return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase()

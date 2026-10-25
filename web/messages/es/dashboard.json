@@ -10,6 +10,11 @@
     "customize": "Personalizar",
     "description": "Tu trabajo diario, resumen financiero y accesos directos."
   },
+  "emptyStates": {
+    "approvals": "No hay nada pendiente de su aprobación.",
+    "inProgress": "No hay borradores sin terminar. Los registros que empiece y deje en borrador aparecen aquí.",
+    "recentEntries": "Todavía no se ha contabilizado ningún asiento."
+  },
   "widgets": {
     "operatingExpenses": "Gastos operativos",
     "journalLines": "Líneas de asiento",

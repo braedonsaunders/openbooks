@@ -10,6 +10,11 @@
     "customize": "自定义",
     "description": "查看日常工作、财务概览和快捷方式。"
   },
+  "emptyStates": {
+    "approvals": "没有等待您审批的事项。",
+    "inProgress": "没有未完成的草稿。您开始但保留为草稿的记录会显示在这里。",
+    "recentEntries": "尚未过账任何分录。"
+  },
   "widgets": {
     "operatingExpenses": "营业费用",
     "journalLines": "日记账明细行",

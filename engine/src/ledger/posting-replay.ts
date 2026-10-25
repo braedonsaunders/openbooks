@@ -546,7 +546,9 @@ export async function regenerateGlImpactTx(
     ),
     postingDate: entry.postingDate,
     periodId: entry.periodId,
-    memo: `Source correction reversal: ${reason}`,
+    // The memo is what people read in ledgers and feeds; the authorization
+    // reason stays in the entry's correction evidence.
+    memo: `Reversal of ${entry.entryNumber} for a corrected source transaction`,
     sourceDocumentId: doc.id,
     origin: doc.journalMode === "currency_adjustment" ? "currency_adjustment" : "migration",
     reversesEntryId: entry.id,

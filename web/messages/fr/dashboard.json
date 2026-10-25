@@ -10,6 +10,11 @@
     "customize": "Personnaliser",
     "description": "Votre travail quotidien, votre aperçu financier et vos raccourcis."
   },
+  "emptyStates": {
+    "approvals": "Rien n’attend votre approbation.",
+    "inProgress": "Aucun brouillon en cours. Les enregistrements que vous commencez et laissez en brouillon apparaissent ici.",
+    "recentEntries": "Aucune écriture n’a encore été comptabilisée."
+  },
   "widgets": {
     "operatingExpenses": "Charges d’exploitation",
     "journalLines": "Lignes de journal",
