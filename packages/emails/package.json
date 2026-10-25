@@ -16,7 +16,7 @@
   },
   "dependencies": {
     "@openbooks/networking": "*",
-    "nodemailer": "^10.0.12",
+    "nodemailer": "^10.2.1",
     "@openbooks/forms-core": "*"
   }
 }
