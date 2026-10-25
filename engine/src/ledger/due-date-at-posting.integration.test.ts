@@ -104,3 +104,34 @@ test("a due date the document states is kept even when terms would imply another
     await dropScratchOrg(org.orgId);
   }
 });
+
+test("a vendor bill under day-of-month terms posts due on that day of the month its terms reach", { skip: !DB }, async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  try {
+    await withBypassContext(async () => {
+      const terms = randomUUID();
+      await db.execute(sql`insert into payment_terms (id, org_id, name, net_days, due_day_of_month)
+        values (${terms}, ${org.orgId}, 'Net 30, 1st following', 30, 1)`);
+      await db.execute(sql`insert into vendor_roles (org_id, party_id, ap_account_id, payment_terms_id, is_active)
+        values (${org.orgId}, ${org.vendorId}, ${org.accounts.ap}, ${terms}, true)`);
+      const docId = randomUUID();
+      await db.execute(sql`insert into documents
+        (id, org_id, kind, status, document_number, subsidiary_id, party_id, document_date, currency, subtotal, tax_total, total)
+        values (${docId}, ${org.orgId}, 'vendor_bill', 'draft', 'BILL-DAY-TERMS', ${org.subsidiaryId}, ${org.vendorId}, ${org.date}, 'CAD', '100', '0', '100')`);
+      await db.execute(sql`insert into document_lines (org_id, document_id, line_number, account_id, quantity, unit_price, amount, tax_amount)
+        values (${org.orgId}, ${docId}, 1, ${org.accounts.cogs}, '1', '100', '100', '0')`);
+      await db.execute(sql`update documents set status = 'approved' where org_id = ${org.orgId} and id = ${docId}`);
+      await postDocument(docId, control(org));
+      const row = await header(docId);
+      // Dated 15 July: thirty days reach 14 August, so the next 1st is 1 September.
+      assert.equal(row.document_date, "2026-07-15");
+      assert.equal(row.status, "posted");
+      assert.equal(row.due_date, "2026-09-01");
+      const lines = await db.execute<{ due_date: string | null }>(sql`
+        select due_date::text as due_date from journal_lines where entry_id = ${row.posted_entry_id} and is_open_item`, "objects");
+      assert.deepEqual(lines.map((line) => line.due_date), ["2026-09-01"]);
+    });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});

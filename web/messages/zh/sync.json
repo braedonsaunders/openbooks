@@ -360,6 +360,7 @@
         "defaultCost": "默认成本",
         "defaultRate": "默认费率",
         "netDays": "净付款天数",
+        "dueDayOfMonth": "每月到期日",
         "discountDays": "折扣天数",
         "discountPercent": "折扣百分比",
         "costMultiplier": "成本系数",

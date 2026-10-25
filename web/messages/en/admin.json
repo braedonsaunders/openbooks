@@ -4154,6 +4154,7 @@
       "pdfField": "PDF field",
       "parentId": "Parent",
       "netDays": "Net days",
+      "dueDayOfMonth": "Due day of month",
       "discountDays": "Discount days",
       "discountPercent": "Discount %",
       "documentKind": "Document or record",
@@ -7150,6 +7151,10 @@
       "method": "Vacation method"
     },
     "collectionPolicy": "Policy",
+    "paymentTermsFields": {
+      "netDaysHelp": "Days after the document date that payment is due. With a due day of month, the minimum number of days to pay before that day.",
+      "dueDayOfMonthHelp": "Leave blank to count net days only. Set a day (1–31) to make payment due on that day of the first month in which it falls more than net days after the document date; 31 means month end. Example: Net 30 with day 1 makes a document dated 22 October due 1 December."
+    },
     "collectionPolicyFields": {
       "policy": "Policy",
       "gracePeriodDays": "Grace period (days)",

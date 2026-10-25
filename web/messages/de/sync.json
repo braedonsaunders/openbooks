@@ -360,6 +360,7 @@
         "defaultCost": "Standardkosten",
         "defaultRate": "Standardpreis",
         "netDays": "Nettozahlungsziel",
+        "dueDayOfMonth": "Fälligkeitstag im Monat",
         "discountDays": "Skontotage",
         "discountPercent": "Skontoprozentsatz",
         "costMultiplier": "Kostenmultiplikator",

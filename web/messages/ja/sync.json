@@ -360,6 +360,7 @@
         "defaultCost": "既定の原価",
         "defaultRate": "既定の単価",
         "netDays": "支払期日までの日数",
+        "dueDayOfMonth": "毎月の支払日",
         "discountDays": "割引日数",
         "discountPercent": "割引率",
         "costMultiplier": "原価倍率",

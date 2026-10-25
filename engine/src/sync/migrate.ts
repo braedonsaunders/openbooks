@@ -9,6 +9,7 @@ import { periodScopeAdvisoryLock } from "../periods/period-locks.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { normalizeMoney } from "../money/money.ts";
 import { assertProjectHeaderChangeAllowed } from "../projects/header-controls.ts";
+import { paymentTermsDueRuleRefusal } from "../ledger/payment-terms-due-date.ts";
 import type {
   EntityStream,
   MigrationSource,
@@ -157,6 +158,38 @@ function persistPaymentTermDiscountPercent(value: unknown): string {
   } catch {
     throw new Error("payment-term discount must be an exact decimal");
   }
+}
+
+/** A source day count: absent is null, anything but a whole number of days is refused. */
+function sourceTermDays(value: unknown, field: string, sourceRef: string): number | null {
+  if (value === undefined || value === null || value === "") return null;
+  const text = typeof value === "number" ? String(value) : typeof value === "string" ? value.trim() : "";
+  const exact = /^\d+(?:\.0+)?$/.test(text) ? Number(text) : Number.NaN;
+  if (!Number.isSafeInteger(exact)) {
+    throw new Error(`payment terms ${sourceRef}: ${field} must be a whole number of days; the source states ${JSON.stringify(value)}`);
+  }
+  return exact;
+}
+
+/**
+ * The due-date and discount rule of a source payment term, validated by the
+ * engine's due-date rule. Net days are required: a source that omits them
+ * cannot say when its documents fall due. A discount that expires on a day of
+ * the month has no native representation, so such terms are refused by name
+ * rather than imported with a different discount window.
+ */
+function sourcePaymentTerms(f: Record<string, unknown>, sourceRef: string) {
+  const discountPercent = f.discountPercent == null || f.discountPercent === "" ? null : persistPaymentTermDiscountPercent(f.discountPercent);
+  const netDays = sourceTermDays(f.netDays, "net days", sourceRef);
+  if (netDays === null) throw new Error(`payment terms ${sourceRef} state no net days; the source must supply when its documents fall due`);
+  const dueDayOfMonth = sourceTermDays(f.dueDayOfMonth, "due day of month", sourceRef);
+  const discountDays = sourceTermDays(f.discountDays, "discount days", sourceRef);
+  if (sourceTermDays(f.discountDayOfMonth, "discount day of month", sourceRef) !== null) {
+    throw new Error(`payment terms ${sourceRef} grant an early-payment discount that expires on a day of the month, which OpenBooks payment terms cannot represent; give the source terms a discount counted in days, or remove the discount, then sync again`);
+  }
+  const refusal = paymentTermsDueRuleRefusal({ netDays, dueDayOfMonth });
+  if (refusal) throw new Error(`payment terms ${sourceRef}: ${refusal}`);
+  return { netDays, dueDayOfMonth, discountDays, discountPercent };
 }
 
 /** Persist leftover migrated item default cost through exact decimal then ledger money. Fail closed. */
@@ -967,18 +1000,41 @@ async function upsertBase(resource: string, ctx: Ctx, rec: SourceEntity, s: Reso
       const byName = await db.execute<{ id: string }>(sql`select id from payment_terms where org_id=${orgId} and name=${name} limit 1`, "objects");
       id = byName[0]?.id ?? null;
     }
-    const netDays = Number(f.netDays ?? 30);
+    const terms = sourcePaymentTerms(f, rec.sourceRef);
     if (id) {
-      await db.execute(sql`update payment_terms set name=${name}, net_days=${netDays}, discount_days=${(f.discountDays as number) ?? null},
-        discount_percent=${f.discountPercent == null || f.discountPercent === "" ? null : persistPaymentTermDiscountPercent(f.discountPercent)},
-        custom=(${custom}::jsonb || payment_terms.custom)
-          || jsonb_build_object(${refKey}::text, ${rec.sourceRef}::text)
-        where id=${id} and org_id=${orgId}`);
+      // A re-sync corrects stored terms in place. A change is audited with its
+      // before and after state in the same transaction; a mapped record is
+      // audited once, by the mapping path, instead.
+      await withOrg(orgId, async () => {
+        const before = (await db.execute<{ snapshot: Record<string, unknown> }>(sql`
+          select to_jsonb(t) - 'custom' as snapshot from payment_terms t
+           where t.id = ${id} and t.org_id = ${orgId} for update`, "objects"))[0];
+        const after = before && (await db.execute<{ snapshot: Record<string, unknown> }>(sql`
+          update payment_terms set name=${name}, net_days=${terms.netDays}, due_day_of_month=${terms.dueDayOfMonth},
+            discount_days=${terms.discountDays}, discount_percent=${terms.discountPercent},
+            custom=(${custom}::jsonb || payment_terms.custom)
+              || jsonb_build_object(${refKey}::text, ${rec.sourceRef}::text)
+           where id=${id} and org_id=${orgId}
+          returning to_jsonb(payment_terms) - 'custom' as snapshot`, "objects"))[0];
+        if (!before || !after) throw new Error(`payment terms ${rec.sourceRef} were not updated; the stored terms are unavailable in this organization`);
+        if (rec.mappingApplied || JSON.stringify(before.snapshot) === JSON.stringify(after.snapshot)) return;
+        const audit = await db.execute<{ id: string }>(sql`
+          insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
+          values (${orgId}, 'payment_terms', ${id}, 'update', ${JSON.stringify({
+            event: "source_payment_terms_updated",
+            before: before.snapshot,
+            after: after.snapshot,
+            source: { system: ctx.sourceName, ref: rec.sourceRef, connectionId: ctx.audit?.connectionId ?? null, syncRunId: ctx.audit?.runId ?? null },
+          })}::jsonb, ${ctx.audit?.actorId ?? null}, ${ctx.audit?.runId ?? null})
+          returning id`, "objects");
+        if (audit.length !== 1) throw new Error(`payment terms ${rec.sourceRef} changed but the audit record was not saved`);
+      });
       s.updated++; return id;
     }
-    const ins = await db.execute<{ id: string }>(sql`insert into payment_terms (org_id, name, net_days, discount_days, discount_percent, custom)
-      values (${orgId}, ${name}, ${netDays}, ${(f.discountDays as number) ?? null}, ${f.discountPercent == null || f.discountPercent === "" ? null : persistPaymentTermDiscountPercent(f.discountPercent)}, ${custom}::jsonb) returning id`, "objects");
-    s.created++; return ins[0]?.id ?? null;
+    const ins = await db.execute<{ id: string }>(sql`insert into payment_terms (org_id, name, net_days, due_day_of_month, discount_days, discount_percent, custom)
+      values (${orgId}, ${name}, ${terms.netDays}, ${terms.dueDayOfMonth}, ${terms.discountDays}, ${terms.discountPercent}, ${custom}::jsonb) returning id`, "objects");
+    if (!ins[0]?.id) throw new Error(`payment terms ${rec.sourceRef} were not created; retry the source import`);
+    s.created++; return ins[0].id;
   }
 
   if (resource === "time_types") {

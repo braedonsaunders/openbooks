@@ -1,12 +1,14 @@
 import { sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   date,
   index,
   integer,
   numeric,
   jsonb,
   pgTable,
+  smallint,
   text,
   timestamp,
   uniqueIndex,
@@ -329,13 +331,21 @@ export const partyBankAccounts = pgTable(
   (t) => [index("bank_accounts_party").on(t.partyId)],
 );
 
+/**
+ * Payment terms. Due dates follow engine/src/ledger/payment-terms-due-date.ts:
+ * `netDays` after the document date, or, when `dueDayOfMonth` is set, the
+ * first such day of a month more than `netDays` after it (31 = month end).
+ */
 export const paymentTerms = pgTable("payment_terms", {
   id: id(),
   orgId: orgRef(),
   name: text("name").notNull(), // "Net 30"
   netDays: integer("net_days").notNull().default(30),
+  dueDayOfMonth: smallint("due_day_of_month"),
   discountDays: integer("discount_days"),
   discountPercent: money("discount_percent"),
   isActive: boolean("is_active").notNull().default(true),
   custom: jsonb("custom").notNull().default({}), // source nsId bridge for sync
-});
+}, (t) => [
+  check("payment_terms_due_day_of_month_range", sql`${t.dueDayOfMonth} between 1 and 31`),
+]);

@@ -360,6 +360,7 @@
         "defaultCost": "Coût par défaut",
         "defaultRate": "Tarif par défaut",
         "netDays": "Délai net",
+        "dueDayOfMonth": "Jour d’échéance du mois",
         "discountDays": "Jours d’escompte",
         "discountPercent": "Pourcentage d’escompte",
         "costMultiplier": "Multiplicateur de coût",

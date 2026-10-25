@@ -4072,6 +4072,7 @@
       "pdfField": "Champ PDF",
       "parentId": "Parent",
       "netDays": "Jours nets",
+      "dueDayOfMonth": "Jour d’échéance du mois",
       "discountDays": "Jours d'escompte",
       "discountPercent": "Escompte %",
       "documentKind": "Document",
@@ -7150,6 +7151,10 @@
       "method": "Mode de vacances"
     },
     "collectionPolicy": "Politique",
+    "paymentTermsFields": {
+      "netDaysHelp": "Jours après la date du document jusqu’à l’échéance. Avec un jour d’échéance du mois, nombre minimal de jours avant ce jour.",
+      "dueDayOfMonthHelp": "Laissez vide pour compter uniquement les jours nets. Indiquez un jour (1–31) pour que le paiement soit dû ce jour-là du premier mois où il tombe plus de jours nets après la date du document ; 31 signifie fin de mois. Exemple : net 30 avec le jour 1 rend un document du 22 octobre exigible le 1er décembre."
+    },
     "collectionPolicyFields": {
       "policy": "Politique",
       "gracePeriodDays": "Délai de grâce (jours)",

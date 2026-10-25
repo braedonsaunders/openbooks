@@ -360,6 +360,7 @@
         "defaultCost": "Custo padrão",
         "defaultRate": "Tarifa padrão",
         "netDays": "Prazo líquido",
+        "dueDayOfMonth": "Dia de vencimento no mês",
         "discountDays": "Dias de desconto",
         "discountPercent": "Percentual de desconto",
         "costMultiplier": "Multiplicador de custo",

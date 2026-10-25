@@ -1,5 +1,5 @@
 import { isUuid } from "../platform/uuid.ts";
-import { addCalendarDays } from "../platform/civil-date.ts";
+import { DocumentDefaultsError, resolveTermsDueDate } from "./document-defaults.ts";
 import { captureDocumentPaymentTerms, PaymentTermsEvidenceError } from "./payment-terms-snapshot.ts";
 import { assertEntityPostingDate } from "../organization/accounting-preferences.ts";
 import { validateJournalInstructions } from "./journal-instructions.ts";
@@ -126,9 +126,19 @@ export async function commitDocumentPosting(prepared: Awaited<ReturnType<typeof 
       if (error instanceof PaymentTermsEvidenceError) throw Object.assign(new PostingError(error.message), { cause: error });
       throw error;
     }
-    if (paymentTermsSnapshot?.documentKind === "vendor_bill" && dueDateFromTerms
-      && dueDateFromTerms.dueDate !== addCalendarDays(effectiveDoc.documentDate, paymentTermsSnapshot.terms?.netDays ?? 0)) {
-      throw new PostingError("The vendor's payment terms changed during posting. Reload the bill and post again so its due date and retained terms agree.");
+    if (paymentTermsSnapshot?.documentKind === "vendor_bill" && dueDateFromTerms) {
+      // Capture holds the vendor, its role and the terms row through commit, so
+      // the due date those locked terms imply is the one the header must carry.
+      let lockedTerms: Awaited<ReturnType<typeof resolveTermsDueDate>>;
+      try {
+        lockedTerms = await resolveTermsDueDate(tx, doc.orgId, effectiveDoc);
+      } catch (error) {
+        if (error instanceof DocumentDefaultsError) throw Object.assign(new PostingError(error.message), { cause: error });
+        throw error;
+      }
+      if (dueDateFromTerms.dueDate !== (lockedTerms?.dueDate ?? effectiveDoc.documentDate)) {
+        throw new PostingError("The vendor's payment terms changed during posting. Reload the bill and post again so its due date and retained terms agree.");
+      }
     }
     const auditBefore = options.audit
       ? await captureTransactionAuditSnapshot(tx, documentId, doc.orgId)

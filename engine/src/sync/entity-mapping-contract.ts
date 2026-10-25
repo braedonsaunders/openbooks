@@ -57,7 +57,7 @@ const CONTRACTS: Record<string, { table?: string; label: string; fields: EntityM
   accounts: { label: 'Accounts', fields: [text('number', 'Account number'), text('name', 'Name'), active] },
   subsidiaries: { label: 'Legal entities', fields: [text('name', 'Name'), text('legalName', 'Legal name'), active] },
   departments: { label: 'Departments', fields: [text('name', 'Name')] },
-  payment_terms: { label: 'Payment terms', fields: [text('name', 'Name'), decimal('netDays', 'Net days', 0), decimal('discountDays', 'Discount days', 0), decimal('discountPercent', 'Discount percent')] },
+  payment_terms: { label: 'Payment terms', fields: [text('name', 'Name'), decimal('netDays', 'Net days', 0), decimal('dueDayOfMonth', 'Due day of month', 0), decimal('discountDays', 'Discount days', 0), decimal('discountPercent', 'Discount percent')] },
   time_types: { label: 'Time types', fields: [text('name', 'Name'), decimal('costMultiplier', 'Cost multiplier'), active] },
   tax_codes: { label: 'Tax codes', fields: [text('code', 'Code'), text('name', 'Name'), choice('appliesTo', 'Applies to', ['sales', 'purchase', 'both'])] },
   items: { label: 'Items', fields: [text('code', 'Code'), text('name', 'Name'), text('category', 'Category'), text('unit', 'Unit'), decimal('defaultCost', 'Default cost'), decimal('defaultRate', 'Default rate'), active] },

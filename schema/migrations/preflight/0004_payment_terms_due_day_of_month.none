@@ -1,0 +1,1 @@
+Adds a nullable column with a range check to payment_terms; every existing row stores null, satisfies the check and keeps its due-date meaning.

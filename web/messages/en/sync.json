@@ -362,6 +362,7 @@
         "defaultCost": "Default cost",
         "defaultRate": "Default rate",
         "netDays": "Net days",
+        "dueDayOfMonth": "Due day of month",
         "discountDays": "Discount days",
         "discountPercent": "Discount percent",
         "costMultiplier": "Cost multiplier",

@@ -1,6 +1,7 @@
 import { sql, type SQL } from 'drizzle-orm'
 import type { SqlExecutor } from '../platform/db.ts'
 import { addCalendarDays, isIsoCalendarDate } from '../platform/civil-date.ts'
+import { paymentTermsDueDate, PaymentTermsDueDateError, type PaymentTermsDueRule } from './payment-terms-due-date.ts'
 import { isUuid } from '../platform/uuid.ts'
 import { businessTodayInTx } from '../platform/business-date.ts'
 import { subsidiaryVisibleFilter } from '../organization/subsidiary-scope.ts'
@@ -14,8 +15,9 @@ import { taxProfileMap } from './document-totals.ts'
  * drawer's pre-save defaults and the server's create/edit writes.
  *
  * Due date. A kind that declares `dueDateFromTerms` (invoices and bills)
- * derives its due date from the party's active payment terms: document date
- * plus the terms' net days ("Due on receipt" is 0, "Net 15" is 15). A party
+ * derives its due date from the party's active payment terms through the one
+ * terms rule in payment-terms-due-date.ts: net days after the document date,
+ * or the first due day of a month more than net days after it. A party
  * without terms falls back to the company default terms; with neither, the
  * due date simply stays unset and the drawer names the missing terms.
  *
@@ -48,6 +50,8 @@ export interface TermsDueDate {
   termsId: string
   termsName: string
   netDays: number
+  /** Day of the month the terms fall due on; null when they count net days only. */
+  dueDayOfMonth: number | null
   dueDate: string
   /** `party` when the party's own terms apply, `company` when the organization's default does. */
   source: 'party' | 'company'
@@ -64,13 +68,20 @@ export interface DocumentLineDefault {
   taxSource: LineTaxSource | null
 }
 
-/** Due date for a document dated `documentDate` under terms of `netDays`. */
-export function dueDateFromNetDays(documentDate: string, netDays: number): string {
-  if (!isIsoCalendarDate(documentDate)) throw new DocumentDefaultsError('document date must be a calendar date (YYYY-MM-DD)')
-  if (!Number.isSafeInteger(netDays) || netDays < 0) {
-    throw new DocumentDefaultsError(`payment terms must state zero or more net days; found ${String(netDays)}. Correct the terms in Setup → Payment terms`)
+type TermsRow = { id: string; name: string; net_days: number; due_day_of_month: number | null }
+
+/** The due date a stored terms row implies, refusing terms that cannot produce one. */
+function termsDueDate(terms: TermsRow, documentDate: string, source: TermsDueDate['source']): TermsDueDate {
+  const rule: PaymentTermsDueRule = {
+    netDays: Number(terms.net_days),
+    dueDayOfMonth: terms.due_day_of_month === null ? null : Number(terms.due_day_of_month),
   }
-  return addCalendarDays(documentDate, netDays)
+  try {
+    return { termsId: terms.id, termsName: terms.name, ...rule, dueDate: paymentTermsDueDate(documentDate, rule), source }
+  } catch (error) {
+    if (error instanceof PaymentTermsDueDateError) throw new DocumentDefaultsError(error.message)
+    throw error
+  }
 }
 
 function partyRoleOf(cfg: DocKindConfig): 'customer' | 'vendor' | null {
@@ -93,15 +104,12 @@ export async function resolveTermsDueDate(
   const role = partyRoleOf(cfg)
   if (!role) return null
   const roleTable = sql.raw(role === 'customer' ? 'customer_roles' : 'vendor_roles')
-  const terms = (await exec.execute<{ id: string; name: string; net_days: number }>(sql`
-    select pt.id, pt.name, pt.net_days
+  const terms = (await exec.execute<TermsRow>(sql`
+    select pt.id, pt.name, pt.net_days, pt.due_day_of_month
       from ${roleTable} r
       join payment_terms pt on pt.id = r.payment_terms_id and pt.org_id = r.org_id and pt.is_active
      where r.org_id = ${orgId} and r.party_id = ${input.partyId}`, 'objects'))[0]
-  if (terms) {
-    const netDays = Number(terms.net_days)
-    return { termsId: terms.id, termsName: terms.name, netDays, dueDate: dueDateFromNetDays(input.documentDate, netDays), source: 'party' }
-  }
+  if (terms) return termsDueDate(terms, input.documentDate, 'party')
   return resolveCompanyTermsDueDate(exec, orgId, input.documentDate)
 }
 
@@ -123,12 +131,11 @@ export async function resolveCompanyTermsDueDate(
     ? billing.defaultPaymentTermsId
     : null
   if (!defaultId) return null
-  const terms = (await exec.execute<{ id: string; name: string; net_days: number }>(sql`
-    select id, name, net_days from payment_terms
+  const terms = (await exec.execute<TermsRow>(sql`
+    select id, name, net_days, due_day_of_month from payment_terms
      where org_id = ${orgId} and id = ${defaultId} and is_active`, 'objects'))[0]
   if (!terms) return null
-  const netDays = Number(terms.net_days)
-  return { termsId: terms.id, termsName: terms.name, netDays, dueDate: dueDateFromNetDays(documentDate, netDays), source: 'company' }
+  return termsDueDate(terms, documentDate, 'company')
 }
 
 type ItemDefaultsRow = {

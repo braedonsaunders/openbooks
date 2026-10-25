@@ -4234,6 +4234,7 @@
       "pdfField": "PDFフィールド",
       "parentId": "親",
       "netDays": "ネット日数",
+      "dueDayOfMonth": "毎月の支払日",
       "discountDays": "割引日数",
       "discountPercent": "割引 %",
       "documentKind": "ドキュメント",
@@ -7150,6 +7151,10 @@
       "method": "休暇方式"
     },
     "collectionPolicy": "ポリシー",
+    "paymentTermsFields": {
+      "netDaysHelp": "書類日付から支払期日までの日数。毎月の支払日を指定した場合は、その日までに必要な最小日数です。",
+      "dueDayOfMonthHelp": "日数のみで計算する場合は空欄にします。日（1～31）を指定すると、書類日付からネット日数を超えた最初の月のその日が支払期日になります。31は月末を表します。例：ネット30・1日指定では、10月22日付の書類は12月1日が期日です。"
+    },
     "collectionPolicyFields": {
       "policy": "ポリシー",
       "gracePeriodDays": "猶予期間（日）",

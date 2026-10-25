@@ -1,5 +1,6 @@
 /** Setup-registry billing entities (split from registry.ts; pure moves only). */
 import type { SetupEntity } from '../types'
+import { PAYMENT_TERMS_DUE_DAY_MAX, PAYMENT_TERMS_DUE_DAY_MIN, PAYMENT_TERMS_MAX_NET_DAYS } from '@openbooks/engine/ledger/payment-terms-due-date'
 
 export const BILLING_ENTITIES: SetupEntity[] = [
   {
@@ -109,13 +110,17 @@ export const BILLING_ENTITIES: SetupEntity[] = [
     columns: [
       { key: 'name', kind: 'text' },
       { key: 'netDays', kind: 'number' },
+      { key: 'dueDayOfMonth', kind: 'number' },
       { key: 'discountDays', kind: 'number' },
       { key: 'discountPercent', kind: 'percent' },
       { key: 'isActive', kind: 'badge-active' },
     ],
+    // Due dates follow engine/src/ledger/payment-terms-due-date.ts; the
+    // write hook refuses any rule that calculator cannot apply.
     fields: [
       { key: 'name', kind: 'text', required: true },
-      { key: 'netDays', kind: 'integer', required: true },
+      { key: 'netDays', kind: 'integer', required: true, min: 0, max: PAYMENT_TERMS_MAX_NET_DAYS, helpTextKey: 'paymentTermsFields.netDaysHelp' },
+      { key: 'dueDayOfMonth', kind: 'integer', min: PAYMENT_TERMS_DUE_DAY_MIN, max: PAYMENT_TERMS_DUE_DAY_MAX, helpTextKey: 'paymentTermsFields.dueDayOfMonthHelp' },
       { key: 'discountDays', kind: 'integer' },
       { key: 'discountPercent', kind: 'percent' },
       { key: 'isActive', kind: 'boolean' },

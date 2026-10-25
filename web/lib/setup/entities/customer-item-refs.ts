@@ -7,6 +7,7 @@ import { validateIdentifierUnit } from '@openbooks/engine/inventory/item-identif
 import { validateCustomerItemRef } from '@openbooks/engine/sales/customer-item-refs'
 import { validateMarketplaceFacilitatorWrite as validateMarketplaceFacilitator } from '@openbooks/engine/tax'
 import { validateTemplateWrite as validateAmortizationTemplate } from '@openbooks/engine/amortization'
+import { paymentTermsDueRuleRefusal } from '@openbooks/engine/ledger/payment-terms-due-date'
 import type { SetupEntity, SetupEntityValidationHook } from '../types'
 import { validateStoredValueProgramWrite } from '../stored-value-validation'
 import { validateEInvoiceSetupWrite } from '../einvoicing-validation'
@@ -72,7 +73,28 @@ const validateAmortizationTemplateWrite: SetupEntityValidationHook = async ({ or
   return validateAmortizationTemplate(executor, orgId, body as Record<string, unknown>, current)
 }
 
+// A partial edit is judged as the whole due-date rule it produces, by the
+// same rule the engine applies when it derives a due date from these terms.
+const validatePaymentTermsWrite: SetupEntityValidationHook = async ({ orgId, body, rowId, executor }) => {
+  const current = rowId
+    ? (await executor.execute<{ net_days: number; due_day_of_month: number | null }>(sql`
+        select net_days, due_day_of_month from payment_terms where id = ${rowId} and org_id = ${orgId}`, 'objects'))[0] ?? null
+    : null
+  if (rowId && !current) return 'not found'
+  const supplied = (key: string, stored: number | null | undefined): unknown => {
+    const value = body[key]
+    if (value === undefined) return stored ?? null
+    if (value === null || value === '') return null
+    return typeof value === 'string' && /^\s*-?\d+\s*$/.test(value) ? Number(value) : value
+  }
+  return paymentTermsDueRuleRefusal({
+    netDays: supplied('netDays', current ? Number(current.net_days) : null),
+    dueDayOfMonth: supplied('dueDayOfMonth', current?.due_day_of_month == null ? null : Number(current.due_day_of_month)),
+  })
+}
+
 const SETUP_ENTITY_VALIDATION_HOOKS: Record<string, SetupEntityValidationHook> = {
+  'payment-terms': validatePaymentTermsWrite,
   'intercompany-representing-parties': validateRepresentingPartiesWrite,
   'intercompany-transfer-pricing': validateTransferPricingWrite,
   'expense-amortization-templates': validateAmortizationTemplateWrite,

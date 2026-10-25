@@ -119,7 +119,7 @@ test("payment terms set the due date: Net 15 adds fifteen days and Due on receip
     const invoice = await withBypass(() => resolveTermsDueDate(db, s.org.orgId, {
       kind: "customer_invoice", partyId: s.org.customerId, documentDate: "2026-07-20",
     }));
-    assert.deepEqual(invoice, { termsId: s.net15, termsName: "Net 15", netDays: 15, dueDate: "2026-08-04", source: "party" });
+    assert.deepEqual(invoice, { termsId: s.net15, termsName: "Net 15", netDays: 15, dueDayOfMonth: null, dueDate: "2026-08-04", source: "party" });
     const bill = await withBypass(() => resolveTermsDueDate(db, s.org.orgId, {
       kind: "vendor_bill", partyId: s.org.vendorId, documentDate: "2026-07-20",
     }));
@@ -150,7 +150,7 @@ test("a party without terms falls back to the company default; a retired default
     await withBypass(() => db.execute(sql`
       update orgs set settings = coalesce(settings, '{}'::jsonb) || jsonb_build_object('billing', jsonb_build_object('defaultPaymentTermsId', ${net30}::text))
        where id = ${s.org.orgId}`));
-    assert.deepEqual(await resolve(), { termsId: net30, termsName: "Net 30", netDays: 30, dueDate: "2026-08-19", source: "company" });
+    assert.deepEqual(await resolve(), { termsId: net30, termsName: "Net 30", netDays: 30, dueDayOfMonth: null, dueDate: "2026-08-19", source: "company" });
     // The party's own terms win over the company default.
     await withBypass(() => db.execute(sql`
       update customer_roles set payment_terms_id = ${s.net15}

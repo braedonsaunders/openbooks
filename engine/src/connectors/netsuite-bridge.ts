@@ -50,6 +50,15 @@ export interface NetSuitePaymentTerm {
   netDays: number;
   discountPercent: string | null;
   discountDays: number | null;
+  /**
+   * Date-driven term fields, reported by bridge 1.7.3 and later. An older
+   * bridge omits them; the engine then reads the term record instead.
+   */
+  dateDriven?: boolean;
+  dayOfMonthNetDue?: string | null;
+  dueNextMonthIfWithinDays?: string | null;
+  dateDrivenDiscountPercent?: string | null;
+  dayDiscountExpires?: string | null;
 }
 
 export interface NetSuiteExportFile {

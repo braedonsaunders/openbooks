@@ -5,7 +5,7 @@
  */
 define(['N/file', 'N/format', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N/task'],
   (file, format, query, record, runtime, search, task) => {
-    const BRIDGE_VERSION = '1.7.2';
+    const BRIDGE_VERSION = '1.7.3';
     const SCHEMA_VERSION = 1;
     const MARKER_PATH = 'SuiteScripts/OpenBooks/Jobs/bridge-marker.json';
     const EXPORT_SCRIPT_ID = 'customscript_openbooks_export_mr';
@@ -198,19 +198,31 @@ define(['N/file', 'N/format', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N
       return { schemaVersion: SCHEMA_VERSION, rows };
     };
 
+    // Standard terms count days from the transaction date; date-driven terms
+    // fall due on a day of the month and carry their own discount fields.
     const paymentTerms = () => {
       const termSearch = search.create({
         type: search.Type.TERM || 'term',
-        columns: ['internalid', 'name', 'daysuntilnetdue', 'discountpercent', 'daysuntilexpiry'],
+        columns: [
+          'internalid', 'name', 'daysuntilnetdue', 'discountpercent', 'daysuntilexpiry', 'datedriven',
+          'dayofmonthnetdue', 'duenextmonthifwithindays', 'discountpercentdatedriven', 'daydiscountexpires',
+        ],
       });
       const rows = [];
       termSearch.run().each((result) => {
+        const value = (name) => text(result.getValue({ name })) || null;
+        const dateDriven = result.getValue({ name: 'datedriven' });
         rows.push({
           id: text(result.getValue({ name: 'internalid' }) || result.id),
           name: text(result.getValue({ name: 'name' })),
           netDays: Number(result.getValue({ name: 'daysuntilnetdue' }) || 0),
           discountPercent: text(result.getValue({ name: 'discountpercent' })) || null,
           discountDays: Number(result.getValue({ name: 'daysuntilexpiry' }) || 0) || null,
+          dateDriven: dateDriven === true || dateDriven === 'T',
+          dayOfMonthNetDue: value('dayofmonthnetdue'),
+          dueNextMonthIfWithinDays: value('duenextmonthifwithindays'),
+          dateDrivenDiscountPercent: value('discountpercentdatedriven'),
+          dayDiscountExpires: value('daydiscountexpires'),
         });
         return true;
       });

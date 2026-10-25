@@ -288,8 +288,15 @@ sources of truth.
 ## Payment Terms
 
 **Payment Terms** define due dates and early-payment discounts: **Net days**, the
-optional **Discount days**, and **Discount percent**. Terms are selected on
-customer and vendor documents to compute due dates and available discounts.
+optional **Due day of month**, the optional **Discount days**, and **Discount
+percent**. Terms are selected on customer and vendor documents to compute due
+dates and available discounts.
+
+Without a due day of month, a document is due its net days after the document
+date. With one, it is due on that day of the first month in which the day falls
+more than net days after the document date, and a day past the end of a short
+month means that month's last day. "Net 30, 1st following" is net days 30 with
+day 1: a document dated 22 October is due 1 December.
 
 ## Number Sequences
 

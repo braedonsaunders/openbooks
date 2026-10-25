@@ -360,6 +360,7 @@
         "defaultCost": "Costo predeterminado",
         "defaultRate": "Tarifa predeterminada",
         "netDays": "Días netos",
+        "dueDayOfMonth": "Día de vencimiento del mes",
         "discountDays": "Días de descuento",
         "discountPercent": "Porcentaje de descuento",
         "costMultiplier": "Multiplicador de costo",

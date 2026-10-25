@@ -4234,6 +4234,7 @@
       "pdfField": "PDF-Feld",
       "parentId": "Übergeordnet",
       "netDays": "Nettotage",
+      "dueDayOfMonth": "Fälligkeitstag im Monat",
       "discountDays": "Skontotage",
       "discountPercent": "Skonto %",
       "documentKind": "Beleg",
@@ -7150,6 +7151,10 @@
       "method": "Urlaubsart"
     },
     "collectionPolicy": "Richtlinie",
+    "paymentTermsFields": {
+      "netDaysHelp": "Tage nach dem Belegdatum bis zur Fälligkeit. Mit einem Fälligkeitstag im Monat die Mindestzahl an Tagen bis zu diesem Tag.",
+      "dueDayOfMonthHelp": "Leer lassen, um nur Nettotage zu zählen. Ein Tag (1–31) macht die Zahlung an diesem Tag des ersten Monats fällig, in dem er mehr als die Nettotage nach dem Belegdatum liegt; 31 steht für das Monatsende. Beispiel: Netto 30 mit Tag 1 macht einen Beleg vom 22. Oktober am 1. Dezember fällig."
+    },
     "collectionPolicyFields": {
       "policy": "Richtlinie",
       "gracePeriodDays": "Karenzzeit (Tage)",

@@ -4072,6 +4072,7 @@
       "pdfField": "Campo PDF",
       "parentId": "Superior",
       "netDays": "Días netos",
+      "dueDayOfMonth": "Día de vencimiento del mes",
       "discountDays": "Días de descuento",
       "discountPercent": "Descuento %",
       "documentKind": "Document",
@@ -7150,6 +7151,10 @@
       "method": "Método de vacaciones"
     },
     "collectionPolicy": "Política",
+    "paymentTermsFields": {
+      "netDaysHelp": "Días tras la fecha del documento hasta el vencimiento. Con un día de vencimiento del mes, el número mínimo de días hasta ese día.",
+      "dueDayOfMonthHelp": "Déjelo en blanco para contar solo los días netos. Indique un día (1–31) para que el pago venza ese día del primer mes en que caiga más de los días netos después de la fecha del documento; 31 significa fin de mes. Ejemplo: neto 30 con el día 1 hace que un documento del 22 de octubre venza el 1 de diciembre."
+    },
     "collectionPolicyFields": {
       "policy": "Política",
       "gracePeriodDays": "Período de gracia (días)",

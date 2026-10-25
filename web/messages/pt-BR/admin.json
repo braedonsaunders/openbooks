@@ -4154,6 +4154,7 @@
       "pdfField": "Campo do PDF",
       "parentId": "Pai",
       "netDays": "Dias líquidos",
+      "dueDayOfMonth": "Dia de vencimento no mês",
       "discountDays": "Dias de desconto",
       "discountPercent": "% de desconto",
       "documentKind": "Documento",
@@ -7150,6 +7151,10 @@
       "method": "Modalidade de férias"
     },
     "collectionPolicy": "Política",
+    "paymentTermsFields": {
+      "netDaysHelp": "Dias após a data do documento até o vencimento. Com um dia de vencimento no mês, o número mínimo de dias até esse dia.",
+      "dueDayOfMonthHelp": "Deixe em branco para contar apenas os dias líquidos. Informe um dia (1–31) para que o pagamento vença nesse dia do primeiro mês em que ele cair mais de dias líquidos após a data do documento; 31 significa fim do mês. Exemplo: líquido 30 com dia 1 faz um documento de 22 de outubro vencer em 1º de dezembro."
+    },
     "collectionPolicyFields": {
       "policy": "Política",
       "gracePeriodDays": "Carência (dias)",

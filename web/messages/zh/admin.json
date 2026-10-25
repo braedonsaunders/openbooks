@@ -4154,6 +4154,7 @@
       "pdfField": "PDF 字段",
       "parentId": "父级",
       "netDays": "净额天数",
+      "dueDayOfMonth": "每月到期日",
       "discountDays": "折扣天数",
       "discountPercent": "折扣 %",
       "documentKind": "文档",
@@ -7150,6 +7151,10 @@
       "method": "休假方式"
     },
     "collectionPolicy": "政策",
+    "paymentTermsFields": {
+      "netDaysHelp": "自单据日期起至到期的天数。设置每月到期日时，为到该日前的最少天数。",
+      "dueDayOfMonthHelp": "留空则仅按净额天数计算。设置某日（1–31）后，付款于单据日期后超过净额天数的第一个月的该日到期；31 表示月末。例如：净额 30 天且为 1 日时，10 月 22 日的单据于 12 月 1 日到期。"
+    },
     "collectionPolicyFields": {
       "policy": "政策",
       "gracePeriodDays": "宽限期（天）",

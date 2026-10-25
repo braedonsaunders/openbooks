@@ -381,6 +381,7 @@
     "./ledger/journal-reversals": "./src/ledger/journal-reversals.ts",
     "./ledger/journal-writes": "./src/ledger/journal-writes.ts",
     "./ledger/partyless-control-policy": "./src/ledger/partyless-control-policy.ts",
+    "./ledger/payment-terms-due-date": "./src/ledger/payment-terms-due-date.ts",
     "./ledger/posted-correction-fields": "./src/ledger/posted-correction-fields.ts",
     "./ledger/posting-control-account": "./src/ledger/posting-control-account.ts",
     "./ledger/posting-dispatch": "./src/ledger/posting-dispatch.ts",
