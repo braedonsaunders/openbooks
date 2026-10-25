@@ -17,7 +17,7 @@
     "isomorphic-dompurify": "^3.18.0",
     "linebreak": "1.1.0",
     "pdfkit": "^0.17.1",
-    "puppeteer-core": "^25.3.0"
+    "puppeteer-core": "^25.16.0"
   },
   "devDependencies": {
     "@types/pdfkit": "^0.13.9"

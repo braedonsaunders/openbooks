@@ -49,7 +49,7 @@
     "jszip": "^3.10.1",
     "lucide-react": "^1.24.0",
     "maplibre-gl": "^6.11.2",
-    "next": "16.3.8",
+    "next": "16.4.3",
     "next-intl": "^4.13.2",
     "pdf-lib": "^1.17.1",
     "prettier": "^3.9.5",
@@ -64,7 +64,7 @@
     "ssh2": "^1.17.0",
     "terra-draw": "^1.35.0",
     "terra-draw-maplibre-gl-adapter": "^1.4.1",
-    "zod": "^4.4.3"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@tailwindcss/forms": "^0.5.11",
