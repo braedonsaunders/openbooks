@@ -114,9 +114,8 @@ function assertSecureEndpoint(
  *  is the one exception. */
 function oidcFetch(url: string | URL, init: RequestInit): Promise<Response> {
   const target = new URL(url);
-  const request: RequestInit = { ...init, redirect: "error" };
-  if (isNonProductionLoopback(target)) return fetch(target, request);
-  return guardedFetch(target, request, { maxResponseBytes: OIDC_MAX_RESPONSE_BYTES });
+  if (isNonProductionLoopback(target)) return fetch(target, { ...init, redirect: "error" });
+  return guardedFetch(target, { ...init, redirect: "error" }, { maxResponseBytes: OIDC_MAX_RESPONSE_BYTES });
 }
 
 const OIDC_MAX_RESPONSE_BYTES = 1_000_000;
