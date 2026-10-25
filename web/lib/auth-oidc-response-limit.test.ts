@@ -7,10 +7,34 @@ process.env.SESSION_SECRET = "oidc-stream-boundary-test-secret";
 process.env.OPENBOOKS_OIDC_CLIENT_ID = "stream-test";
 process.env.OPENBOOKS_APP_URL = "https://books.example.test";
 
+// The suite runs with NODE_ENV=test, where a loopback provider is reached with
+// the platform fetch stubbed below; each case gets its own port so the
+// discovery cache never carries over between cases.
+let nextPort = 18_000;
+const loopbackIssuer = () => `http://localhost:${nextPort++}`;
+
+test("OIDC refuses private, link-local and metadata provider hosts before any request", async () => {
+  const original = globalThis.fetch;
+  let requests = 0;
+  globalThis.fetch = async () => {
+    requests++;
+    return Response.json({});
+  };
+  try {
+    for (const issuer of ["https://169.254.169.254", "https://10.0.0.5", "https://192.168.1.10", "https://[fd00::1]"]) {
+      process.env.OPENBOOKS_OIDC_ISSUER = issuer;
+      await assert.rejects(() => beginOidcAuthorization(null), /must be public unicast/);
+    }
+    assert.equal(requests, 0);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
 for (const stage of ["discovery", "token", "jwks"] as const) {
   for (const length of ["missing", "understated", "oversized"] as const) {
     test(`OIDC bounds ${stage} while streaming with ${length} Content-Length`, async () => {
-      const issuer = `https://${stage}-${length}.example.test`;
+      const issuer = loopbackIssuer();
       process.env.OPENBOOKS_OIDC_ISSUER = issuer;
       let pulls = 0;
       let canceled = false;
@@ -52,7 +76,7 @@ for (const stage of ["discovery", "token", "jwks"] as const) {
 
 for (const size of [1_000_000, 1_000_001]) {
   test(`OIDC discovery handles split UTF-8 at ${size} bytes`, async () => {
-    const issuer = `https://utf8-${size}.example.test`;
+    const issuer = loopbackIssuer();
     process.env.OPENBOOKS_OIDC_ISSUER = issuer;
     const metadata = { issuer, authorization_endpoint: `${issuer}/authorize`, token_endpoint: `${issuer}/token`, jwks_uri: `${issuer}/jwks`, padding: "" };
     const paddingBytes = size - Buffer.byteLength(JSON.stringify(metadata));

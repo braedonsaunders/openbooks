@@ -1,5 +1,6 @@
 import "server-only";
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { guardedFetch } from "@openbooks/engine/connectors/ssrf-guard";
 import { safeReturnTo } from "./auth-policy";
 import { isNamedNonProductionEnvironment, requireSessionSecret } from "./auth-secret-policy";
 import { verifyOidcIdToken, type VerifiedOidcClaims } from "./auth-oidc-token";
@@ -71,14 +72,23 @@ export function oidcLabel(): string {
   return process.env.OPENBOOKS_OIDC_LABEL?.trim().slice(0, 80) || "Single sign-on";
 }
 
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
+
+/** A loopback identity provider is only ever reachable in a named development or test environment. */
+function isNonProductionLoopback(
+  url: URL,
+  environment: Record<string, string | undefined> = process.env,
+): boolean {
+  return isNamedNonProductionEnvironment(environment) && LOOPBACK_HOSTS.has(url.hostname);
+}
+
 function assertSecureEndpoint(
   value: string,
   label: string,
   environment: Record<string, string | undefined> = process.env,
 ): URL {
   const url = new URL(value);
-  const local = ["localhost", "127.0.0.1", "::1"].includes(url.hostname);
-  if (url.protocol !== "https:" && !(isNamedNonProductionEnvironment(environment) && local)) {
+  if (url.protocol !== "https:" && !isNonProductionLoopback(url, environment)) {
     throw new Error(
       `${label} must use HTTPS (HTTP loopback is allowed only when NODE_ENV is explicitly development or test)`,
     );
@@ -94,14 +104,26 @@ function assertSecureEndpoint(
  *  names. Discovery and JWKS carry no secret themselves, but a redirected
  *  discovery document chooses where the NEXT request sends the secret and a
  *  redirected JWKS chooses which signing keys are trusted, so every outbound
- *  OIDC call fails closed instead of following. */
+ *  OIDC call fails closed instead of following.
+ *
+ *  Every provider endpoint also goes through the shared outbound guard: the
+ *  host must resolve only to public unicast addresses and the connection is
+ *  pinned to the addresses checked, so neither the issuer nor a discovery
+ *  document can point the token exchange at private, link-local or metadata
+ *  services. A loopback provider in a named development or test environment
+ *  is the one exception. */
 function oidcFetch(url: string | URL, init: RequestInit): Promise<Response> {
-  return fetch(url, { ...init, redirect: "error" });
+  const target = new URL(url);
+  const request: RequestInit = { ...init, redirect: "error" };
+  if (isNonProductionLoopback(target)) return fetch(target, request);
+  return guardedFetch(target, request, { maxResponseBytes: OIDC_MAX_RESPONSE_BYTES });
 }
+
+const OIDC_MAX_RESPONSE_BYTES = 1_000_000;
 
 /** Bound decoded response bytes while reading, including chunked/compressed bodies. */
 async function readOidcResponse(response: Response, label: string): Promise<string> {
-  const limit = 1_000_000;
+  const limit = OIDC_MAX_RESPONSE_BYTES;
   const reader = response.body?.getReader();
   try {
     if (Number(response.headers.get("content-length")) > limit) throw new Error(`${label} is too large`);
