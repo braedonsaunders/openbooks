@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { defineRoute } from '@/lib/api/route'
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { parseJsonBody } from '@/lib/api/json'
+import { fileContentDisposition } from '@/lib/export'
 import { NextResponse } from 'next/server'
 import { yearEndFiling } from '@openbooks/engine/payroll/filing-registry'
 import { PayrollPackError } from '@openbooks/engine/payroll/packs'
@@ -121,7 +122,7 @@ async function serveFile(gate: Authz, input: FileInput, method: 'GET' | 'POST' =
     return new NextResponse(file.body, {
       headers: {
         'Content-Type': file.contentType,
-        'Content-Disposition': `attachment; filename="${file.filename}"`,
+        'Content-Disposition': fileContentDisposition('attachment', file.filename),
       },
     })
   } catch (e) {

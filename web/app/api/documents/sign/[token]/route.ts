@@ -1,5 +1,6 @@
 import { defineRoute } from '@/lib/api/route';
 import { NextResponse } from "next/server";
+import { pdfResponse } from "@/lib/export";
 import {
   acknowledgeDocument,
   declineTokenDocument,
@@ -27,9 +28,7 @@ export const GET = defineRoute({
         const { token } = await params;
         const { document, signers, bytes } = await readTokenDocument(token);
         if (new URL(req.url).searchParams.get("format") === "pdf") {
-          return new NextResponse(bytes as unknown as BodyInit, {
-            headers: { "content-type": "application/pdf" },
-          });
+          return pdfResponse(bytes, document.title);
         }
         return NextResponse.json({
           document: {

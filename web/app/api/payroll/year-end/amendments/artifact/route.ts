@@ -1,5 +1,6 @@
 import { defineRoute } from '@/lib/api/route'
 import { NextResponse } from 'next/server'
+import { fileContentDisposition } from '@/lib/export'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
 import { filingArtifact } from '@openbooks/engine/payroll/yearend-amendments'
@@ -74,7 +75,7 @@ export const GET = defineRoute({
     return new NextResponse(file.body, {
       headers: {
         'Content-Type': file.contentType,
-        'Content-Disposition': `attachment; filename="${file.filename}"`,
+        'Content-Disposition': fileContentDisposition('attachment', file.filename),
       },
     })
 

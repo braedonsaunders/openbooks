@@ -2,6 +2,7 @@ import { defineRoute } from '@/lib/api/route'
 import { z } from 'zod'
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
+import { fileContentDisposition } from '@/lib/export'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
 import { releasePayRunBankFile } from '@openbooks/engine/payroll/bank-file-artifact'
@@ -63,7 +64,7 @@ export const POST = defineRoute({
       return new NextResponse(new Uint8Array(released.bytes), {
         headers: {
           'Content-Type': released.contentType,
-          'Content-Disposition': `attachment; filename="${released.filename}"`,
+          'Content-Disposition': fileContentDisposition('attachment', released.filename),
           'Content-Length': String(released.bytes.length),
           // Never cached, never stored by an intermediary: these are live
           // payment instructions, and the release count must stay truthful.

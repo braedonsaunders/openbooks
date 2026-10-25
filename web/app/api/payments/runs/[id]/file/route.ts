@@ -4,6 +4,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
 import { generatePaymentFileArtifact, recordPaymentFileDownload } from '@openbooks/engine/payments/operations'
 import { assertRunPayeesInScope } from '@openbooks/engine/payments/run-readiness'
+import { fileContentDisposition } from '@/lib/export'
 import { refuseMaskedStorageKind } from '../../../../../../lib/file-storage'
 import { isUuid } from '../../../../../../lib/list-params'
 import { guardPaymentRunPermission, paymentErrorResponse } from '../../../lib'
@@ -47,7 +48,7 @@ async function legacyGET(_req: Request, { params }: { params: Promise<{ id: stri
     return new NextResponse(new Uint8Array(file.bytes), {
       headers: {
         'Content-Type': file.content_type,
-        'Content-Disposition': `attachment; filename="${file.filename}"`,
+        'Content-Disposition': fileContentDisposition('attachment', file.filename),
         'Cache-Control': 'no-store',
       },
     })

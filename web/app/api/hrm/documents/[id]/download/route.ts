@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
+import { fileContentDisposition } from "@/lib/export";
 import { readDocumentFile } from "@openbooks/engine/hrm/documents/documents";
 import { guardPermission } from "../../../../../../lib/authz";
 import { hrmDocumentsErrorResponse } from "../../_lib";
@@ -28,7 +29,7 @@ export const GET = defineRoute({
       return new NextResponse(file.bytes as unknown as BodyInit, {
         headers: {
           "content-type": "application/pdf",
-          "content-disposition": `attachment; filename="${file.filename}"`,
+          "content-disposition": fileContentDisposition("attachment", file.filename),
         },
       });
     } catch (e) {

@@ -1,13 +1,18 @@
 import 'server-only'
 import { NextResponse } from 'next/server'
 
-/** Stream a generated PDF inline (browser preview) with a download filename. */
+/**
+ * Stream a generated PDF inline (browser preview) with a download filename.
+ * `nosniff` holds the browser to the declared PDF type, so the bytes are
+ * never re-interpreted as active content on the app origin.
+ */
 export function pdfResponse(pdf: Buffer, filename: string): NextResponse {
   return new NextResponse(new Uint8Array(pdf), {
     status: 200,
     headers: {
       'Content-Type': 'application/pdf',
       'Content-Disposition': contentDisposition('inline', filename, 'pdf'),
+      'X-Content-Type-Options': 'nosniff',
       'Cache-Control': 'no-store',
     },
   })
@@ -87,4 +92,27 @@ export function contentDisposition(
     .trim() || 'export'
   const encoded = encodeURIComponent(full.replace(/[\uD800-\uDFFF]/g, '\uFFFD'))
   return `${disposition}; filename="${asciiBase}.${extension}"; filename*=UTF-8''${encoded}`
+}
+
+/**
+ * The same header for a stored or generated file whose name already carries
+ * its extension (bank files, filings, labels, employee documents). Stored
+ * names are user- or provider-influenced, so quotes, backslashes, path
+ * separators and control characters never reach the header; the full UTF-8
+ * name travels in RFC 5987 `filename*`.
+ */
+export function fileContentDisposition(disposition: 'inline' | 'attachment', filename: string): string {
+  const full = filename
+    .replace(/[/\\]/g, '-')
+    .replace(/[\u0000-\u001f\u007f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim() || 'download'
+  const ascii = full
+    .normalize('NFKD')
+    .replace(/[^\x20-\x7e]/g, '')
+    .replace(/["\\]/g, '')
+    .trim() || 'download'
+  const encoded = encodeURIComponent(full.replace(/[\uD800-\uDFFF]/g, '\uFFFD'))
+    .replace(/['()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`)
+  return `${disposition}; filename="${ascii}"; filename*=UTF-8''${encoded}`
 }

@@ -4,6 +4,7 @@ import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { db } from '@openbooks/engine/platform/database'
 import { readLabelFile } from '@openbooks/engine/sales/shipping-labels'
 import { notFound } from '@/lib/api/responses'
+import { fileContentDisposition } from '@/lib/export'
 import { defineRoute } from '@/lib/api/route'
 
 const labelParams = z.object({ id: uuidString() })
@@ -22,7 +23,7 @@ export const GET = defineRoute({
     return new NextResponse(file.bytes as unknown as BodyInit, {
       headers: {
         'content-type': file.contentType,
-        'content-disposition': `attachment; filename="${file.filename}"`,
+        'content-disposition': fileContentDisposition('attachment', file.filename),
       },
     })
   },
