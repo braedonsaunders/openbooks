@@ -4,6 +4,7 @@ import { basename } from 'node:path'
 import { NextResponse } from 'next/server'
 import { defineRoute } from '@/lib/api/route'
 import { apiErrorResponse } from '@/lib/api/error-response'
+import { MULTIPART_FRAMING_BYTES, parseFormDataBody } from '@/lib/api/form-data'
 import { can } from '@/lib/authz'
 import { db } from '@openbooks/engine/platform/db'
 import { captureContentMatchesMime } from '@openbooks/engine/payables/ap-capture'
@@ -112,9 +113,13 @@ export const POST = defineRoute({
       }, { status: 409 })
     }
 
-    const form = await request.formData().catch(() => null)
-    if (!form) return NextResponse.json({ error: 'Send the receipts as multipart form data' }, { status: 400 })
-    const files = form.getAll('files').filter((value): value is File => value instanceof File)
+    const parsed = await parseFormDataBody(request, {
+      maxBodyBytes: MAX_FILES * MAX_BYTES + MULTIPART_FRAMING_BYTES,
+      invalid: { error: 'Send the receipts as multipart form data' },
+      tooLarge: { error: `Scan at most ${MAX_FILES} receipts of up to 20 MB each`, code: 'invalid_size' },
+    })
+    if (!parsed.ok) return parsed.response
+    const files = parsed.data.getAll('files').filter((value): value is File => value instanceof File)
     if (files.length === 0) return NextResponse.json({ error: 'Choose at least one receipt to scan', code: 'no_files' }, { status: 400 })
     if (files.length > MAX_FILES) {
       return NextResponse.json({ error: `Scan at most ${MAX_FILES} receipts at a time`, code: 'too_many_files' }, { status: 422 })

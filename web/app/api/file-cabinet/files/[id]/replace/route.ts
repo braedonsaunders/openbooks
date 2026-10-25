@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
+import { MULTIPART_FRAMING_BYTES, parseFormDataBody } from "@/lib/api/form-data";
 import { NextResponse } from "next/server";
 import {
   isRetainedFileEvidence,
@@ -28,13 +29,12 @@ export const POST = defineRoute({
     const access = await requireFileAccess(gate, id, "editor");
     if (access) return access;
 
-    const form = await req.formData().catch(() => null);
-    if (!form)
-      return NextResponse.json(
-        { error: "expected multipart/form-data" },
-        { status: 400 },
-      );
-    const file = form.get("file");
+    const parsed = await parseFormDataBody(req, {
+      maxBodyBytes: MAX_BYTES + MULTIPART_FRAMING_BYTES,
+      tooLarge: { error: "file exceeds 25 MB limit" },
+    });
+    if (!parsed.ok) return parsed.response;
+    const file = parsed.data.get("file");
     if (!(file instanceof File))
       return NextResponse.json({ error: "file is required" }, { status: 400 });
     if (!isAllowedContentType(file.type)) {

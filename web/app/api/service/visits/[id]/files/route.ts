@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { defineRoute } from '@/lib/api/route'
+import { MULTIPART_FRAMING_BYTES, parseFormDataBody } from '@/lib/api/form-data'
 import { authorizeService } from '@/lib/service/authority'
 import { attachVisitFile, listVisitFiles, MAX_VISIT_FILE_BYTES } from '@/lib/service/files'
 import { idParams } from '@/lib/service/schemas'
@@ -22,10 +23,13 @@ export const POST = defineRoute({
   params: idParams,
   invalidParamsNotFound: 'record',
   handler: async ({ authz, params, request }) => {
-    const length = Number(request.headers.get('content-length') ?? '0')
-    if (length > MAX_VISIT_FILE_BYTES + 64 * 1024) return NextResponse.json({ error: 'Attachments are at most 10 MB.', remedy: 'Reduce the photo size and attach it again.' }, { status: 413 })
-    const form = await request.formData().catch(() => null)
-    const file = form?.get('file')
+    const parsed = await parseFormDataBody(request, {
+      maxBodyBytes: MAX_VISIT_FILE_BYTES + MULTIPART_FRAMING_BYTES,
+      invalid: { error: 'Choose a photo or PDF to attach.' },
+      tooLarge: { error: 'Attachments are at most 10 MB.', remedy: 'Reduce the photo size and attach it again.' },
+    })
+    if (!parsed.ok) return parsed.response
+    const file = parsed.data.get('file')
     if (!(file instanceof File)) return NextResponse.json({ error: 'Choose a photo or PDF to attach.' }, { status: 400 })
     const attached = await attachVisitFile(authz, {
       visitId: params.id, filename: file.name, contentType: file.type, bytes: Buffer.from(await file.arrayBuffer()),

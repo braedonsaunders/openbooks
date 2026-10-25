@@ -1,4 +1,5 @@
 import { defineRoute } from "@/lib/api/route";
+import { MULTIPART_FRAMING_BYTES, parseFormDataBody } from "@/lib/api/form-data";
 import { NextResponse } from "next/server";
 import { getFolder, listFiles } from "../../../../lib/file-cabinet";
 import { isUuid } from "../../../../lib/list-params";
@@ -55,12 +56,12 @@ export const GET = defineRoute({
 export const POST = defineRoute({
   public: "session",
   handler: async ({ request: req, authz: gate }) => {
-    const form = await req.formData().catch(() => null);
-    if (!form)
-      return NextResponse.json(
-        { error: "expected multipart/form-data" },
-        { status: 400 },
-      );
+    const parsed = await parseFormDataBody(req, {
+      maxBodyBytes: MAX_BYTES + MULTIPART_FRAMING_BYTES,
+      tooLarge: { error: "file exceeds 25 MB limit" },
+    });
+    if (!parsed.ok) return parsed.response;
+    const form = parsed.data;
     const file = form.get("file");
     const folderId = String(form.get("folderId") ?? "");
     if (!(file instanceof File))

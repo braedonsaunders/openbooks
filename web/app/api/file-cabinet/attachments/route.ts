@@ -2,6 +2,7 @@ import { z } from "zod";
 import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 import { parseJsonBody } from "@/lib/api/json";
+import { MULTIPART_FRAMING_BYTES, parseFormDataBody } from "@/lib/api/form-data";
 import { NextResponse } from "next/server";
 import {
   attachExisting,
@@ -88,12 +89,12 @@ export const POST = defineRoute({
     const contentType = req.headers.get("content-type") ?? "";
 
     if (contentType.startsWith("multipart/form-data")) {
-      const form = await req.formData().catch(() => null);
-      if (!form)
-        return NextResponse.json(
-          { error: "expected multipart/form-data" },
-          { status: 400 },
-        );
+      const parsed = await parseFormDataBody(req, {
+        maxBodyBytes: MAX_BYTES + MULTIPART_FRAMING_BYTES,
+        tooLarge: { error: "file exceeds 25 MB limit" },
+      });
+      if (!parsed.ok) return parsed.response;
+      const form = parsed.data;
       const file = form.get("file");
       const targetTable = String(form.get("targetTable") ?? "");
       const targetId = String(form.get("targetId") ?? "");
