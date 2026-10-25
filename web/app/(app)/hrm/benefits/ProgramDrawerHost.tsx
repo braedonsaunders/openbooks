@@ -37,7 +37,7 @@ export function ProgramDrawerHost({ refreshKey }: { refreshKey: string }) {
     if (isListDrawerHrefChange(window.location.href, href)) window.history.pushState(null, '', href)
     else router.push(href as never)
   }}>
-    <AsyncServerDrawer resourceKey={requestKey} open openKey={id} title={t('feedback.loading')} closeHref={benefitsProgramCloseHref(new URLSearchParams(query))}
+    <AsyncServerDrawer resourceKey={`${retry}:${query}`} open openKey={id} title={t('feedback.loading')} closeHref={benefitsProgramCloseHref(new URLSearchParams(query))}
       pending={!current} error={current?.error} onRetry={() => setRetry(value => value + 1)}>
       {current?.content}
     </AsyncServerDrawer>
