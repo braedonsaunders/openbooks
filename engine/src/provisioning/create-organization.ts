@@ -7,7 +7,7 @@ import { UNUSABLE_PASSWORD_HASH } from "../organization/pending-credential.ts";
 import { lockLoginEmail } from "../organization/login-identity.ts";
 import { provisionPayrollPackDefaults } from "../payroll/run-setup.ts";
 import { db, withBypass } from "../platform/db.ts";
-import { upsertBuiltInRolesForOrg } from "./built-in-role-seed.ts";
+import { alignBuiltInAdministratorRole, type AdministratorRoleAlignment, upsertBuiltInRolesForOrg } from "./built-in-role-seed.ts";
 import { provisionOrganizationDefaults } from "./organization-provisioning.ts";
 
 /**
@@ -223,6 +223,14 @@ export async function seedBuiltInRolesForNewOrganization(orgId: string): Promise
   if (hasRoles) return "preserved";
   await upsertBuiltInRolesForOrg(db, orgId, BUILT_IN_ROLES);
   return "seeded";
+}
+
+/**
+ * Bring an existing organization's locked built-in Administrator role up to
+ * the current permission catalogue (additive; audited when it changes).
+ */
+export async function alignAdministratorRoleToCatalogue(orgId: string): Promise<AdministratorRoleAlignment> {
+  return alignBuiltInAdministratorRole(db, orgId, BUILT_IN_ROLES.admin!.permissions);
 }
 
 /**

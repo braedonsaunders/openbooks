@@ -3,6 +3,7 @@ import { randomBytes, scryptSync } from "node:crypto"
 import { sql } from "drizzle-orm"
 import { db, env } from "@openbooks/engine/platform/db"
 import {
+  alignAdministratorRoleToCatalogue,
   ensureRootSubsidiary as ensureOrganizationRootSubsidiary,
   insertOrganizationRecord,
   seedBuiltInRolesForNewOrganization,
@@ -80,6 +81,17 @@ export async function seedRoles(orgId: string): Promise<void> {
     return;
   }
   console.log("[bootstrap] built-in roles ensured (new-org defaults; existing grants unchanged)");
+}
+
+/**
+ * The locked built-in Administrator role always holds the full catalogue,
+ * including permissions introduced after the organization was created.
+ */
+export async function alignAdministratorRole(orgId: string): Promise<void> {
+  const outcome = await alignAdministratorRoleToCatalogue(orgId)
+  if (outcome === "aligned") {
+    console.log(`[bootstrap] org ${orgId} built-in Administrator role aligned to the permission catalogue`)
+  }
 }
 
 export async function seedAdmin(orgId: string): Promise<void> {

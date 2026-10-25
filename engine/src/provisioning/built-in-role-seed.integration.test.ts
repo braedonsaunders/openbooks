@@ -8,6 +8,7 @@ import {
   dropScratchOrgReporting,
 } from "../testing/fixtures.ts";
 import { seedRolesForOrg } from "./seed-roles.ts";
+import { alignAdministratorRoleToCatalogue } from "./create-organization.ts";
 import { seedRoles } from "../../../scripts/bootstrap/seed.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
@@ -205,6 +206,60 @@ test("the engine seeder refuses a same-key custom role with a usable remedy and 
     assert.equal(kept.is_built_in, false);
     assert.equal(kept.name, "Local controller");
     assert.deepEqual(kept.permissions, ["gl.read"]);
+  } finally {
+    await dropScratchOrgReporting(orgId);
+  }
+});
+
+test("the built-in Administrator role gains later catalogue permissions additively, with audit evidence", { skip: !DB }, async () => {
+  const { orgId } = await createScratchOrg();
+  try {
+    await seedRolesForOrg(orgId);
+    const catalogue = BUILT_IN_ROLES["admin"]!.permissions;
+    const stale = ["outside.catalogue", ...catalogue.slice(0, 5)];
+    const reduced = await db.execute<{ id: string }>(sql`
+      update app_roles set permissions = ${JSON.stringify(stale)}::jsonb
+       where org_id = ${orgId} and key = 'admin' and is_built_in
+      returning id`, "objects");
+    assert.equal(reduced.length, 1);
+
+    assert.equal(await alignAdministratorRoleToCatalogue(orgId), "aligned");
+    const aligned = (await roleByKey(orgId, "admin")).permissions as string[];
+    assert.deepEqual(aligned.slice(0, stale.length), stale, "stored grants are kept in place");
+    assert.deepEqual(new Set(aligned), new Set([...stale, ...catalogue]));
+
+    const evidence = await db.execute<{ changes: { added: string[]; reason: string }; actor_id: string | null }>(sql`
+      select changes, actor_id from audit_log
+       where org_id = ${orgId} and table_name = 'app_roles' and row_id = ${reduced[0]!.id}`, "objects");
+    assert.equal(evidence.length, 1);
+    assert.equal(evidence[0]!.changes.reason, "built_in_administrator_catalogue_alignment");
+    assert.deepEqual(evidence[0]!.changes.added, catalogue.slice(5));
+    assert.equal(evidence[0]!.actor_id, null);
+
+    assert.equal(await alignAdministratorRoleToCatalogue(orgId), "unchanged");
+    const after = await db.execute<{ n: string }>(sql`
+      select count(*) as n from audit_log
+       where org_id = ${orgId} and table_name = 'app_roles' and row_id = ${reduced[0]!.id}`, "objects");
+    assert.equal(Number(after[0]!.n), 1, "an aligned role records no further evidence");
+  } finally {
+    await dropScratchOrgReporting(orgId);
+  }
+});
+
+test("Administrator alignment never touches a same-key custom role or other built-ins", { skip: !DB }, async () => {
+  const { orgId } = await createScratchOrg();
+  try {
+    await db.execute(sql`
+      insert into app_roles (org_id, key, name, is_built_in, permissions)
+      values (${orgId}, 'admin', 'admin', false, '["gl.read"]'::jsonb)`);
+    await db.execute(sql`
+      insert into app_roles (org_id, key, name, is_built_in, permissions)
+      values (${orgId}, 'controller', 'Controller', true, '["gl.read"]'::jsonb)`);
+    const before = await roleSnapshot(orgId);
+
+    assert.equal(await alignAdministratorRoleToCatalogue(orgId), "absent");
+
+    assert.equal(await roleSnapshot(orgId), before);
   } finally {
     await dropScratchOrgReporting(orgId);
   }

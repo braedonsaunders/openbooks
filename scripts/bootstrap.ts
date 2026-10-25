@@ -2,7 +2,7 @@ import { ensureRetirementBackupAccess } from "./bootstrap/retirement-backup-acce
 import { runtimeDatabaseConfig, bypassDatabaseConfig } from "./bootstrap-paths"
 import { assertConstrainedSchemaOwnerMigrationRole, requireRuntimeLoginRole, requireBypassLoginRole, ensureRuntimeRoleExists, ensureBypassRoleExists, ensureBypassObjectGrants, ensureBypassDatabaseRole, ensureRuntimeDatabaseRole, verifyRuntimeDatabaseRole, transferTestOwnershipToRuntimeRole, ensureReadRole } from "./bootstrap/database-roles"
 import { runUpgradeCheckMain, migrate } from "./bootstrap/migrate"
-import { ensureOrg, seedCurrencies, ensureRootSubsidiary, seedRoles, seedAdmin, ensureFirstPlatformAdmin } from "./bootstrap/seed"
+import { ensureOrg, seedCurrencies, ensureRootSubsidiary, seedRoles, alignAdministratorRole, seedAdmin, ensureFirstPlatformAdmin } from "./bootstrap/seed"
 import { sql } from "drizzle-orm"
 import { precreatedRolesEnabled, verifyPrecreatedRoles, verifyPrecreatedObjectAccess, verifyRuntimeOwnership } from "./bootstrap-roles.ts"
 import { db, env, longPool, pool, withBypassContext } from "@openbooks/engine/platform/db"
@@ -188,6 +188,7 @@ async function main(): Promise<void> {
       for (const { id: orgId } of organizations.rows) {
         await ensureRootSubsidiary(orgId);
         await seedRoles(orgId);
+        await alignAdministratorRole(orgId);
         await provisionOrganizationDefaults(orgId);
         await provisionPayrollPackDefaults(orgId);
       }

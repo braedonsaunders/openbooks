@@ -56,3 +56,58 @@ export async function upsertBuiltInRolesForOrg(
     }
   });
 }
+
+export type AdministratorRoleAlignment = "aligned" | "unchanged" | "absent";
+
+/**
+ * Keep an organization's built-in Administrator role holding the full
+ * permission catalogue.
+ *
+ * Admin -> Roles refuses every edit to that role, so its stored grants can
+ * never carry an administrator's customization; they are only ever the
+ * catalogue as of the release that seeded the organization. Without this
+ * step, permissions introduced by later releases would never reach existing
+ * organizations' administrators, and nobody could grant them.
+ *
+ * Alignment is additive: missing catalogue permissions are appended and
+ * nothing already stored is removed, so grants contributed outside the
+ * catalogue survive. A same-key custom role is never touched. A change is
+ * recorded in audit_log with before/after grants in the same transaction.
+ */
+export async function alignBuiltInAdministratorRole(
+  runner: BuiltInRoleSeedRunner,
+  orgId: string,
+  catalogue: readonly string[],
+): Promise<AdministratorRoleAlignment> {
+  return runner.transaction(async (tx) => {
+    const rows = await tx.execute<{ id: string; permissions: unknown }>(sql`
+      select id, permissions from app_roles
+       where org_id = ${orgId} and key = 'admin' and is_built_in
+       for update
+    `, "objects");
+    const role = rows[0];
+    if (!role) return "absent";
+    const stored = Array.isArray(role.permissions)
+      ? role.permissions.filter((key): key is string => typeof key === "string")
+      : [];
+    const held = new Set(stored);
+    const missing = catalogue.filter((key) => !held.has(key));
+    if (missing.length === 0) return "unchanged";
+    const next = [...stored, ...missing];
+    const updated = await tx.execute<{ id: string }>(sql`
+      update app_roles set permissions = ${JSON.stringify(next)}::jsonb, updated_at = now()
+       where id = ${role.id} and org_id = ${orgId}
+      returning id
+    `, "objects");
+    if (updated.length !== 1) {
+      throw new Error(`built-in Administrator role for organization ${orgId} was not aligned to the permission catalogue`);
+    }
+    await tx.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${orgId}, 'app_roles', ${role.id}, 'update',
+              ${JSON.stringify({ permissions: [stored, next], added: missing, reason: "built_in_administrator_catalogue_alignment" })}::jsonb,
+              null)
+    `);
+    return "aligned";
+  });
+}
