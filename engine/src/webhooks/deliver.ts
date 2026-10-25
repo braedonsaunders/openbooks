@@ -48,6 +48,9 @@ export const WEBHOOK_SIGNATURE_SKEW_MS = 5 * 60 * 1000;
 const BACKOFF_BASE_MS = 60_000;
 const BACKOFF_CAP_MS = 6 * 60 * 60 * 1000;
 const RESPONSE_EXCERPT_CHARS = 2000;
+/** Only an excerpt of the subscriber's answer is kept, so a delivery pass
+ *  never buffers more than this per response. */
+const WEBHOOK_MAX_RESPONSE_BYTES = 1_048_576;
 
 export class WebhookDeliveryError extends Error {}
 
@@ -156,7 +159,7 @@ export async function postWebhookDelivery(
         headers: { ...headers, "content-type": "application/json" },
         body,
         signal: controller.signal,
-      });
+      }, { maxResponseBytes: WEBHOOK_MAX_RESPONSE_BYTES });
     const text = await response.text().catch(() => "");
     return { status: response.status, bodyExcerpt: text.slice(0, RESPONSE_EXCERPT_CHARS) };
   } finally {
