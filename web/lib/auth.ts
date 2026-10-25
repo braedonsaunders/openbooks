@@ -1086,6 +1086,34 @@ async function reauthenticateMfaSecurityChange(
   suppliedCode: string,
   context: AuthRequestContext,
 ): Promise<MfaSecurityReauthResult> {
+  const result = await reauthenticateLiveSession(userId, sessionId, password, context, {
+    verify: () => verifyEnabledMfaFactor(userId, suppliedCode),
+    failureOutcome: "mfa_failure",
+  });
+  // MFA changes keep one refusal for every credential failure, including a
+  // saturated password KDF.
+  if (!result.ok && result.reason === "busy") return { ok: false, reason: "invalid_credentials" };
+  return result;
+}
+
+/** A live-session reauthentication refusal, or a saturated password KDF. */
+type LiveSessionReauthFailure = MfaSecurityChangeFailure | { ok: false; reason: "busy" };
+
+/**
+ * Password reauthentication for a privileged change made from a live
+ * session. Runs inside the caller's bypass transaction: it takes the login
+ * locks, confirms the caller session is live, applies the same rate limits
+ * and lockout as sign-in, and counts a wrong password as a failed attempt.
+ * `verify` runs only after the password matches; returning null refuses the
+ * change exactly like a wrong password, so neither factor is an oracle.
+ */
+async function reauthenticateLiveSession<T>(
+  userId: string,
+  sessionId: string,
+  password: string,
+  context: AuthRequestContext,
+  check: { verify: () => Promise<T | null>; failureOutcome: "failure" | "mfa_failure" },
+): Promise<{ ok: true; verified: T } | LiveSessionReauthFailure> {
   const identityResult = (await db.execute<{ email: string }>(sql`
     select email from users where id = ${userId} and is_active
   `, "objects"));
@@ -1122,13 +1150,13 @@ async function reauthenticateMfaSecurityChange(
   const passwordVerification: Awaited<ReturnType<typeof verifyPassword>> = password.length > 0 && password.length <= 1024
     ? await verifyPassword(password, user.passwordHash)
     : { valid: false, needsRehash: false };
-  if (passwordVerification.capacityLimited) return { ok: false, reason: "invalid_credentials" };
+  if (passwordVerification.capacityLimited) return { ok: false, reason: "busy" };
   const verified = passwordVerification.valid
-    ? await verifyEnabledMfaFactor(userId, suppliedCode)
+    ? await check.verify()
     : null;
-  if (!verified) {
+  if (verified === null) {
     await registerFailure(emailHash, state, userId);
-    await recordLoginEvent({ userId, emailHash, outcome: "mfa_failure", authMethod: "password", networkHash, userAgentHash });
+    await recordLoginEvent({ userId, emailHash, outcome: check.failureOutcome, authMethod: "password", networkHash, userAgentHash });
     return { ok: false, reason: "invalid_credentials" };
   }
   await upgradePasswordHashIfNeeded(
@@ -1206,6 +1234,72 @@ export async function rotateRecoveryCodes(
       { mfaEnabled: true, recoveryCodesRemaining: reauth.verified.recoveryCodesBefore },
       { mfaEnabled: true, recoveryCodesRemaining: recoveryCodes.length });
     return { ok: true, recoveryCodes } as const;
+  });
+}
+
+export type ReplaceOwnPasswordResult = { ok: true; revokedSessions: number } | LiveSessionReauthFailure;
+
+/**
+ * Replace the signed-in identity's password after reauthenticating with the
+ * current one. The caller supplies the new password already hashed (the KDF
+ * runs before this transaction, never under its locks) and has already
+ * applied the password policy. In one transaction: the caller session stays
+ * live, every other session is signed out, outstanding reset links are
+ * spent, and redacted evidence is written to the audit log. Enrolled MFA
+ * factors are unchanged and remain required at sign-in.
+ */
+export async function replaceOwnPassword(input: {
+  userId: string;
+  sessionId: string;
+  currentPassword: string;
+  newPasswordHash: string;
+  context: AuthRequestContext;
+}): Promise<ReplaceOwnPasswordResult> {
+  const { userId, sessionId } = input;
+  // bypass: identity-bootstrap — the credential and its sessions belong to the identity, not to the organization the request is scoped to.
+  return withBypass(async () => {
+    const reauth = await reauthenticateLiveSession(userId, sessionId, input.currentPassword, input.context, {
+      verify: async () => true,
+      failureOutcome: "failure",
+    });
+    if (!reauth.ok) return reauth;
+    // Authoritative check: the caller session may have been revoked while
+    // reauthentication held this transaction. The mutation below runs only
+    // while this lock is held, in this same transaction.
+    if (!(await lockLiveCallerSession(userId, sessionId))) {
+      return { ok: false, reason: "caller_session_revoked" } as const;
+    }
+    const updated = await db.execute<{ id: string }>(sql`
+      update users set password_hash = ${input.newPasswordHash}, updated_at = now(), updated_by = ${userId}
+       where id = ${userId} and is_active
+      returning id
+    `, "objects");
+    if (updated.length !== 1) {
+      throw new Error(`password change matched ${updated.length} active users for identity ${userId}; expected exactly one`);
+    }
+    const revoked = await db.execute<{ id: string }>(sql`
+      update auth_sessions set revoked_at = now(), revocation_reason = 'password_changed'
+       where user_id = ${userId} and id <> ${sessionId} and revoked_at is null
+      returning id
+    `, "objects");
+    // A reset link issued before the change would otherwise restore access
+    // with a password the holder no longer needs to know.
+    await db.execute(sql`
+      update auth_password_resets set used_at = now()
+       where user_id = ${userId} and used_at is null
+    `);
+    // Pending sign-in challenges accepted the previous password.
+    await db.execute(sql`
+      update auth_login_challenges set consumed_at = now()
+       where user_id = ${userId} and consumed_at is null
+    `);
+    await db.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      select org_id, 'users', id, 'update',
+             ${JSON.stringify({ passwordChanged: true, otherSessionsSignedOut: revoked.length })}::jsonb, id
+        from users where id = ${userId}
+    `);
+    return { ok: true, revokedSessions: revoked.length } as const;
   });
 }
 

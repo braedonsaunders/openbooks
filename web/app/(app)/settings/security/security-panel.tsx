@@ -54,6 +54,39 @@ export async function jsonRequest(
   return response.json().catch(() => ({}));
 }
 
+const PASSWORD_REFUSAL_KEYS = {
+  invalid_current_password: "passwordWrongCurrent",
+  unchanged_password: "passwordUnchanged",
+  weak_password: "passwordTooShort",
+  busy: "passwordBusy",
+} as const;
+
+export type PasswordChangeRefusal =
+  | { kind: "lockout"; seconds: number }
+  | { kind: "copy"; key: (typeof PASSWORD_REFUSAL_KEYS)[keyof typeof PASSWORD_REFUSAL_KEYS]; min?: number }
+  | { kind: "text"; text: string };
+
+/**
+ * Classify a password-change refusal: a lockout carries its retry delay,
+ * known refusal codes map to their own localized copy, and anything else
+ * keeps the server's message. The minimum length is the server's policy,
+ * carried on the refusal, never a second copy here.
+ */
+export async function passwordChangeRefusal(response: Response, requestFailed: string): Promise<PasswordChangeRefusal> {
+  const message = await readApiErrorMessage(response.clone(), requestFailed);
+  const body = (await response.json().catch(() => null)) as
+    | { code?: unknown; retryAfter?: unknown; minLength?: unknown }
+    | null;
+  if (body && typeof body.retryAfter === "number" && Number.isFinite(body.retryAfter)) {
+    return { kind: "lockout", seconds: Math.max(0, Math.ceil(body.retryAfter)) };
+  }
+  const code = typeof body?.code === "string" ? body.code : null;
+  if (!code || !Object.hasOwn(PASSWORD_REFUSAL_KEYS, code)) return { kind: "text", text: message };
+  const key = PASSWORD_REFUSAL_KEYS[code as keyof typeof PASSWORD_REFUSAL_KEYS];
+  if (key !== "passwordTooShort") return { kind: "copy", key };
+  return typeof body?.minLength === "number" ? { kind: "copy", key, min: body.minLength } : { kind: "text", text: message };
+}
+
 export function SecurityPanel() {
   const t = useTranslations("shell.securityPage");
   const tLogin = useTranslations("login");
@@ -77,6 +110,10 @@ export function SecurityPanel() {
   const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
+  const [passwordNotice, setPasswordNotice] = useState<{ tone: "success" | "error"; text: string } | null>(null);
 
   // Fetch chain: every state update sits in a promise continuation (the fetch
   // response), never synchronously in the effect body.
@@ -130,8 +167,112 @@ export function SecurityPanel() {
     }
   }
 
+  async function changePassword() {
+    if (newPassword !== confirmNewPassword) {
+      setPasswordNotice({ tone: "error", text: t("passwordsDoNotMatch") });
+      return;
+    }
+    setBusy(true);
+    setPasswordNotice(null);
+    try {
+      let response: Response;
+      try {
+        response = await fetch("/api/auth/password", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ currentPassword, newPassword }),
+          cache: "no-store",
+        });
+      } catch {
+        setPasswordNotice({ tone: "error", text: requestFailed });
+        return;
+      }
+      if (!response.ok) {
+        const refusal = await passwordChangeRefusal(response, requestFailed);
+        const text = refusal.kind === "lockout"
+          ? lockoutMessage(refusal.seconds)
+          : refusal.kind === "text"
+            ? refusal.text
+            : refusal.key === "passwordTooShort"
+              ? t("passwordTooShort", { min: refusal.min ?? 0 })
+              : t(refusal.key);
+        setPasswordNotice({ tone: "error", text });
+        return;
+      }
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmNewPassword("");
+      setPasswordNotice({ tone: "success", text: t("passwordChanged") });
+      await reload().catch(() => undefined);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const passwordSession = sessions.some((session) => session.current && session.authMethod === "password");
+
   return (
     <div className="grid gap-6 lg:grid-cols-2">
+      {loaded && !loadError && passwordSession ? (
+        <Card>
+          <CardContent className="space-y-5 p-6">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-950 dark:text-white">{t("changePasswordTitle")}</h2>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{t("changePasswordDescription")}</p>
+            </div>
+            <form
+              className="space-y-3"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void changePassword();
+              }}
+            >
+              <div className="space-y-1.5">
+                <Label htmlFor="change-current-password">{t("currentPassword")}</Label>
+                <Input
+                  id="change-current-password"
+                  type="password"
+                  autoComplete="current-password"
+                  value={currentPassword}
+                  onChange={(event) => setCurrentPassword(event.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="change-new-password">{t("newPassword")}</Label>
+                <Input
+                  id="change-new-password"
+                  type="password"
+                  autoComplete="new-password"
+                  value={newPassword}
+                  onChange={(event) => setNewPassword(event.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="change-confirm-password">{t("confirmNewPassword")}</Label>
+                <Input
+                  id="change-confirm-password"
+                  type="password"
+                  autoComplete="new-password"
+                  value={confirmNewPassword}
+                  onChange={(event) => setConfirmNewPassword(event.target.value)}
+                />
+              </div>
+              {passwordNotice ? (
+                <p
+                  className={`text-sm ${passwordNotice.tone === "error" ? "text-red-600 dark:text-red-400" : "text-teal-700 dark:text-teal-300"}`}
+                  role={passwordNotice.tone === "error" ? "alert" : "status"}
+                >
+                  {passwordNotice.text}
+                </p>
+              ) : null}
+              <Button type="submit" disabled={busy || !currentPassword || !newPassword || !confirmNewPassword}>
+                {t("updatePassword")}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      ) : null}
+
       <Card>
         <CardContent className="space-y-5 p-6">
           <div>

@@ -267,7 +267,19 @@
     "lastUsed": "Último uso: {date}",
     "revoke": "Revogar",
     "revokeOtherSessions": "Revogar todas as outras sessões",
-    "requestFailed": "Não foi possível concluir a solicitação de segurança. Tente novamente."
+    "requestFailed": "Não foi possível concluir a solicitação de segurança. Tente novamente.",
+    "changePasswordTitle": "Alterar senha",
+    "changePasswordDescription": "Ao alterar sua senha, esta sessão continua conectada e suas outras sessões são encerradas.",
+    "currentPassword": "Senha atual",
+    "newPassword": "Nova senha",
+    "confirmNewPassword": "Confirme a nova senha",
+    "passwordsDoNotMatch": "As novas senhas não coincidem.",
+    "updatePassword": "Atualizar senha",
+    "passwordChanged": "Sua senha foi alterada. Suas outras sessões foram encerradas.",
+    "passwordWrongCurrent": "Sua senha atual está incorreta.",
+    "passwordUnchanged": "Escolha uma nova senha diferente da sua senha atual.",
+    "passwordTooShort": "Escolha uma nova senha com pelo menos {min} caracteres.",
+    "passwordBusy": "O login está ocupado no momento. Tente novamente em instantes."
   },
   "localNavigation": "Navegação local",
   "shortcuts": {

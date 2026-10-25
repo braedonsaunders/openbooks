@@ -267,7 +267,19 @@
     "lastUsed": "Dernière utilisation : {date}",
     "revoke": "Révoquer",
     "revokeOtherSessions": "Révoquer toutes les autres sessions",
-    "requestFailed": "La demande de sécurité n’a pas abouti. Veuillez réessayer."
+    "requestFailed": "La demande de sécurité n’a pas abouti. Veuillez réessayer.",
+    "changePasswordTitle": "Changer le mot de passe",
+    "changePasswordDescription": "La modification de votre mot de passe conserve cette session et déconnecte vos autres sessions.",
+    "currentPassword": "Mot de passe actuel",
+    "newPassword": "Nouveau mot de passe",
+    "confirmNewPassword": "Confirmez le nouveau mot de passe",
+    "passwordsDoNotMatch": "Les nouveaux mots de passe ne correspondent pas.",
+    "updatePassword": "Mettre à jour le mot de passe",
+    "passwordChanged": "Votre mot de passe a été modifié. Vos autres sessions ont été déconnectées.",
+    "passwordWrongCurrent": "Votre mot de passe actuel est incorrect.",
+    "passwordUnchanged": "Choisissez un nouveau mot de passe différent de votre mot de passe actuel.",
+    "passwordTooShort": "Choisissez un nouveau mot de passe d’au moins {min} caractères.",
+    "passwordBusy": "La connexion est momentanément surchargée. Réessayez dans un instant."
   },
   "localNavigation": "Navigation locale",
   "shortcuts": {

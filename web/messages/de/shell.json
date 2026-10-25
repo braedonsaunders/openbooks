@@ -267,7 +267,19 @@
     "lastUsed": "Zuletzt verwendet: {date}",
     "revoke": "Beenden",
     "revokeOtherSessions": "Alle anderen Sitzungen beenden",
-    "requestFailed": "Die Sicherheitsanfrage konnte nicht abgeschlossen werden. Bitte versuchen Sie es erneut."
+    "requestFailed": "Die Sicherheitsanfrage konnte nicht abgeschlossen werden. Bitte versuchen Sie es erneut.",
+    "changePasswordTitle": "Passwort ändern",
+    "changePasswordDescription": "Wenn Sie Ihr Passwort ändern, bleibt diese Sitzung angemeldet und alle anderen Sitzungen werden abgemeldet.",
+    "currentPassword": "Aktuelles Passwort",
+    "newPassword": "Neues Passwort",
+    "confirmNewPassword": "Neues Passwort bestätigen",
+    "passwordsDoNotMatch": "Die neuen Passwörter stimmen nicht überein.",
+    "updatePassword": "Passwort aktualisieren",
+    "passwordChanged": "Ihr Passwort wurde geändert. Ihre anderen Sitzungen wurden abgemeldet.",
+    "passwordWrongCurrent": "Ihr aktuelles Passwort ist falsch.",
+    "passwordUnchanged": "Wählen Sie ein neues Passwort, das sich von Ihrem aktuellen Passwort unterscheidet.",
+    "passwordTooShort": "Wählen Sie ein neues Passwort mit mindestens {min} Zeichen.",
+    "passwordBusy": "Die Anmeldung ist gerade ausgelastet. Versuchen Sie es gleich noch einmal."
   },
   "localNavigation": "Lokale Navigation",
   "shortcuts": {

@@ -267,7 +267,19 @@
     "lastUsed": "Last used {date}",
     "revoke": "Revoke",
     "revokeOtherSessions": "Revoke all other sessions",
-    "requestFailed": "The security request could not be completed. Please try again."
+    "requestFailed": "The security request could not be completed. Please try again.",
+    "changePasswordTitle": "Change password",
+    "changePasswordDescription": "Changing your password keeps this session signed in and signs out your other sessions.",
+    "currentPassword": "Current password",
+    "newPassword": "New password",
+    "confirmNewPassword": "Confirm new password",
+    "passwordsDoNotMatch": "The new passwords do not match.",
+    "updatePassword": "Update password",
+    "passwordChanged": "Your password has been changed. Your other sessions have been signed out.",
+    "passwordWrongCurrent": "Your current password is incorrect.",
+    "passwordUnchanged": "Choose a new password that is different from your current password.",
+    "passwordTooShort": "Choose a new password of at least {min} characters.",
+    "passwordBusy": "Sign-in is busy right now. Try again in a moment."
   },
   "localNavigation": "Local navigation",
   "shortcuts": {

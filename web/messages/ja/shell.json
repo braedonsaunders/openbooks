@@ -267,7 +267,19 @@
     "lastUsed": "最終使用: {date}",
     "revoke": "取り消す",
     "revokeOtherSessions": "他のすべてのセッションを取り消す",
-    "requestFailed": "セキュリティのリクエストを完了できませんでした。もう一度お試しください。"
+    "requestFailed": "セキュリティのリクエストを完了できませんでした。もう一度お試しください。",
+    "changePasswordTitle": "パスワードの変更",
+    "changePasswordDescription": "パスワードを変更すると、このセッションはサインインしたまま、他のセッションはすべてサインアウトされます。",
+    "currentPassword": "現在のパスワード",
+    "newPassword": "新しいパスワード",
+    "confirmNewPassword": "新しいパスワード（確認）",
+    "passwordsDoNotMatch": "新しいパスワードが一致しません。",
+    "updatePassword": "パスワードを更新",
+    "passwordChanged": "パスワードを変更しました。他のセッションはサインアウトされました。",
+    "passwordWrongCurrent": "現在のパスワードが正しくありません。",
+    "passwordUnchanged": "現在のパスワードとは異なる新しいパスワードを選択してください。",
+    "passwordTooShort": "{min} 文字以上の新しいパスワードを選択してください。",
+    "passwordBusy": "現在サインイン処理が混み合っています。しばらくしてからもう一度お試しください。"
   },
   "localNavigation": "ローカルナビゲーション",
   "shortcuts": {

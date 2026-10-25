@@ -267,7 +267,19 @@
     "lastUsed": "上次使用：{date}",
     "revoke": "撤销",
     "revokeOtherSessions": "撤销其他所有会话",
-    "requestFailed": "无法完成安全请求。请重试。"
+    "requestFailed": "无法完成安全请求。请重试。",
+    "changePasswordTitle": "更改密码",
+    "changePasswordDescription": "更改密码后，当前会话保持登录，其他所有会话将被注销。",
+    "currentPassword": "当前密码",
+    "newPassword": "新密码",
+    "confirmNewPassword": "确认新密码",
+    "passwordsDoNotMatch": "两次输入的新密码不一致。",
+    "updatePassword": "更新密码",
+    "passwordChanged": "密码已更改。您的其他会话已被注销。",
+    "passwordWrongCurrent": "当前密码不正确。",
+    "passwordUnchanged": "请选择与当前密码不同的新密码。",
+    "passwordTooShort": "请选择至少 {min} 个字符的新密码。",
+    "passwordBusy": "登录服务当前繁忙，请稍后重试。"
   },
   "localNavigation": "局部导航",
   "shortcuts": {
