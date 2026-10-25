@@ -8,7 +8,7 @@ import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { importNetSuiteCrm } from "./netsuite-crm.ts";
 import { syncNetSuiteFixedAssets } from "./netsuite-fixed-assets.ts";
 import { importNetSuiteAttachments, downloadSourceFile, safeFilename } from "./netsuite-attachments.ts";
-import { DEFAULT_NETSUITE_BRIDGE_SCRIPT_ID, DEFAULT_NETSUITE_BRIDGE_DEPLOYMENT_ID, NetSuiteBridgeClient, type NetSuiteBridgeConfig, type NetSuitePaymentTerm } from "../connectors/netsuite-bridge.ts";
+import { DEFAULT_NETSUITE_BRIDGE_SCRIPT_ID, DEFAULT_NETSUITE_BRIDGE_DEPLOYMENT_ID, NetSuiteBridgeClient, type NetSuiteBridgeConfig } from "../connectors/netsuite-bridge.ts";
 import type { NetSuiteCreds } from "../connectors/netsuite.ts";
 import { fromUnits, mulDecimal, normalizeMoney, toUnits } from "../money/money.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
@@ -458,51 +458,6 @@ export function normalizeNetSuiteAccountingPeriods(
       },
     };
   });
-}
-
-type NetSuiteTermDateDriven = Pick<NetSuitePaymentTerm, "dateDriven" | "dayOfMonthNetDue" | "dueNextMonthIfWithinDays" | "dateDrivenDiscountPercent" | "dayDiscountExpires">;
-
-/** The date-driven fields of a loaded NetSuite term record. */
-export function netSuiteTermDateDrivenFields(fields: Record<string, unknown>): NetSuiteTermDateDriven {
-  return {
-    dateDriven: isT(fields.datedriven) || fields.datedriven === "true",
-    dayOfMonthNetDue: s(fields.dayofmonthnetdue),
-    dueNextMonthIfWithinDays: s(fields.duenextmonthifwithindays),
-    dateDrivenDiscountPercent: s(fields.discountpercentdatedriven),
-    dayDiscountExpires: s(fields.daydiscountexpires),
-  };
-}
-
-/**
- * A NetSuite term as native payment terms. Standard terms are due their net
- * days after the transaction date. A date-driven term is due on its day of
- * the month, moved to the next month when the transaction falls within its
- * "due next month if within days" window: natively, a due day of month whose
- * net days are that window (blank in NetSuite means none). A date-driven term
- * without a day carries day 0, which the loader refuses by name, and a
- * date-driven discount carries its expiry day so the loader can refuse a
- * discount it cannot represent.
- */
-export function normalizeNetSuitePaymentTerm(term: NetSuitePaymentTerm, dateDriven: NetSuiteTermDateDriven): SourceEntity {
-  const fields: Record<string, unknown> = { name: term.name };
-  if (dateDriven.dateDriven) {
-    const discountPercent = s(dateDriven.dateDrivenDiscountPercent);
-    Object.assign(fields, {
-      netDays: s(dateDriven.dueNextMonthIfWithinDays) ?? 0,
-      dueDayOfMonth: s(dateDriven.dayOfMonthNetDue) ?? 0,
-      discountPercent,
-      discountDays: null,
-      discountDayOfMonth: discountPercent && canonicalDecimal(discountPercent) !== "0" ? s(dateDriven.dayDiscountExpires) ?? 0 : null,
-    });
-  } else {
-    Object.assign(fields, {
-      netDays: term.netDays,
-      dueDayOfMonth: null,
-      discountDays: term.discountDays,
-      discountPercent: term.discountPercent,
-    });
-  }
-  return { sourceRef: term.id, naturalKey: term.name, fields };
 }
 
 /**
@@ -1153,17 +1108,16 @@ export class NetSuiteSource implements MigrationSource {
   }
 
   private async paymentTerms(): Promise<SourceEntity[]> {
-    const out: SourceEntity[] = [];
-    for (const term of await this.bridge.paymentTerms()) {
-      // A bridge older than 1.7.3 omits the date-driven fields. NetSuite
-      // forbids net days on date-driven terms, so only a term without net
-      // days can be date-driven; its record states which it is.
-      const dateDriven = term.dateDriven !== undefined || term.netDays > 0
-        ? term
-        : netSuiteTermDateDrivenFields((await this.bridge.record<{ fields: Record<string, unknown> }>("term", term.id)).fields);
-      out.push(normalizeNetSuitePaymentTerm(term, dateDriven));
-    }
-    return out;
+    return (await this.bridge.paymentTerms()).map((term) => ({
+      sourceRef: term.id,
+      naturalKey: term.name,
+      fields: {
+        name: term.name,
+        netDays: term.netDays,
+        discountDays: term.discountDays,
+        discountPercent: term.discountPercent,
+      },
+    }));
   }
 
   private async timeTypes(): Promise<SourceEntity[]> {
