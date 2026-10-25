@@ -50,10 +50,13 @@ export interface TaxProfiles {
   groups: Map<string, TaxComponentConfig[]>
 }
 
-/** Effective, ordered tax profiles for a transaction date. */
-export async function taxProfileMap(resolvedOrgId: string, asOfDate?: string): Promise<TaxProfiles> {
+/**
+ * Effective, ordered tax profiles for a transaction date: exactly the codes
+ * and groups a document dated `asOfDate` can be taxed with.
+ */
+export async function taxProfileMap(resolvedOrgId: string, asOfDate?: string, exec: SqlExecutor = db): Promise<TaxProfiles> {
   const date = asOfDate ?? await businessToday(resolvedOrgId)
-  const codeRows = (await db.execute<TaxCodeProfileRow>(sql`
+  const codeRows = (await exec.execute<TaxCodeProfileRow>(sql`
     select tc.id, tc.code, tr.rate_percent::text as effective_rate,
            tc.recoverable_percent::text as recoverable_percent,
            tc.calculation_type, tc.price_includes_tax, tc.compound_on_previous,
@@ -91,7 +94,7 @@ export async function taxProfileMap(resolvedOrgId: string, asOfDate?: string): P
     .filter((row) => row.effective_rate != null)
     .map((row) => [String(row.id), [config(row, 1)]]))
 
-  const groupRows = (await db.execute<TaxCodeProfileRow>(sql`
+  const groupRows = (await exec.execute<TaxCodeProfileRow>(sql`
     select tg.id as group_id, tg.price_includes_tax as group_inclusive,
            tgm.sequence, tc.id, tc.code, tc.is_active as code_active, tr.rate_percent::text as effective_rate,
            tc.recoverable_percent::text as recoverable_percent,

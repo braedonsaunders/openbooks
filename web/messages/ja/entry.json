@@ -3,7 +3,9 @@
   "noPaymentTermsVendor": "{name} に支払条件がありません — 仕入先に支払条件を設定するか、会社の既定値を設定してください",
   "partyDefault": {
     "configured": "新しい明細行には {party} の既定勘定である {account} が使用されます。",
-    "history": "新しい明細行には {account} が使用されます。{party} の{count, plural, one {最近の伝票 # 件} other {最近の伝票 # 件}}で使用された勘定です。"
+    "history": "新しい明細行には {account} が使用されます。{party} の{count, plural, one {最近の伝票 # 件} other {最近の伝票 # 件}}で使用された勘定です。",
+    "taxConfigured": "新しい明細行には {party} の既定税コードである {tax} が適用されます。",
+    "taxHistory": "新しい明細行には {tax} が適用されます。{party} の{count, plural, one {最近の伝票 # 件} other {最近の伝票 # 件}}で使用された税コードです。"
   },
   "controlTotal": {
     "label": "照合合計",

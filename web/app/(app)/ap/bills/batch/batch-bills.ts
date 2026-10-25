@@ -475,6 +475,8 @@ export interface VendorDefaults {
   termsDueDate: string | null
   accountId: string | null
   taxCodeId: string | null
+  /** A tax group the vendor's history settles on; never set with `taxCodeId`. */
+  taxGroupId: string | null
 }
 
 /** The vendor's default account and tax code and its terms-derived due date,
@@ -495,7 +497,7 @@ export async function fetchVendorDefaults(
   if (!response.ok) return null
   const body = (await response.json().catch(() => null)) as {
     terms?: { dueDate?: unknown } | null
-    party?: { line?: { accountId?: unknown; taxCodeId?: unknown } | null } | null
+    party?: { line?: { accountId?: unknown; taxCodeId?: unknown; taxGroupId?: unknown } | null } | null
   } | null
   if (!body) return null
   const line = body.party?.line
@@ -503,6 +505,7 @@ export async function fetchVendorDefaults(
     termsDueDate: typeof body.terms?.dueDate === 'string' ? body.terms.dueDate : null,
     accountId: typeof line?.accountId === 'string' ? line.accountId : null,
     taxCodeId: typeof line?.taxCodeId === 'string' ? line.taxCodeId : null,
+    taxGroupId: typeof line?.taxGroupId === 'string' ? line.taxGroupId : null,
   }
 }
 
@@ -526,7 +529,7 @@ export function applyVendorDefaults(
   if (context.hasTax) {
     const followsTax = row.taxProfileId === '' || row.taxProfileId === row.defaultedTaxProfileId
     if (followsTax) {
-      const value = defaults.taxCodeId ? `code:${defaults.taxCodeId}` : ''
+      const value = defaults.taxCodeId ? `code:${defaults.taxCodeId}` : defaults.taxGroupId ? `group:${defaults.taxGroupId}` : ''
       const tax = value && context.taxProfileValues.has(value) ? value : ''
       next.taxProfileId = tax
       next.defaultedTaxProfileId = tax

@@ -192,20 +192,25 @@ test('a duplicated row is a new bill with its own create key', () => {
 
 test('vendor defaults fill blanks and follow the vendor, but never replace the clerk\'s choice', () => {
   const context = { accountIds: new Set([ACCOUNT, OTHER_ACCOUNT]), taxProfileValues: new Set([`code:${TAX_CODE}`]), hasTax: true }
-  const filled = applyVendorDefaults(bill({ accountId: '' }), { termsDueDate: null, accountId: ACCOUNT, taxCodeId: TAX_CODE }, context)
+  const filled = applyVendorDefaults(bill({ accountId: '' }), { termsDueDate: null, accountId: ACCOUNT, taxCodeId: TAX_CODE, taxGroupId: null }, context)
   assert.equal(filled.accountId, ACCOUNT)
   assert.equal(filled.taxProfileId, `code:${TAX_CODE}`)
   assert.equal(filled.defaultsFor, VENDOR_A)
 
-  const chosen = applyVendorDefaults(bill({ accountId: OTHER_ACCOUNT }), { termsDueDate: null, accountId: ACCOUNT, taxCodeId: null }, context)
+  const chosen = applyVendorDefaults(bill({ accountId: OTHER_ACCOUNT }), { termsDueDate: null, accountId: ACCOUNT, taxCodeId: null, taxGroupId: null }, context)
   assert.equal(chosen.accountId, OTHER_ACCOUNT, 'an account the clerk chose is kept')
 
-  const switched = applyVendorDefaults({ ...filled, partyId: VENDOR_B }, { termsDueDate: null, accountId: OTHER_ACCOUNT, taxCodeId: null }, context)
+  const switched = applyVendorDefaults({ ...filled, partyId: VENDOR_B }, { termsDueDate: null, accountId: OTHER_ACCOUNT, taxCodeId: null, taxGroupId: null }, context)
   assert.equal(switched.accountId, OTHER_ACCOUNT, 'the previous vendor\'s default follows the new vendor')
   assert.equal(switched.taxProfileId, '', 'a stale default tax is cleared')
 
-  const outOfScope = applyVendorDefaults(bill({ accountId: '' }), { termsDueDate: null, accountId: VENDOR_B, taxCodeId: null }, context)
+  const outOfScope = applyVendorDefaults(bill({ accountId: '' }), { termsDueDate: null, accountId: VENDOR_B, taxCodeId: null, taxGroupId: null }, context)
   assert.equal(outOfScope.accountId, '', 'a default outside the page\'s choices is not applied')
+
+  const grouped = applyVendorDefaults(bill({ accountId: '' }), { termsDueDate: null, accountId: ACCOUNT, taxCodeId: null, taxGroupId: TAX_GROUP }, {
+    ...context, taxProfileValues: new Set([`code:${TAX_CODE}`, `group:${TAX_GROUP}`]),
+  })
+  assert.equal(grouped.taxProfileId, `group:${TAX_GROUP}`, 'a tax group the vendor settles on is preselected like a code')
 })
 
 // -- persistence ---------------------------------------------------------------

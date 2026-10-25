@@ -267,6 +267,7 @@ interface SeedLine {
   unitPrice?: string;
   departmentId?: string | null;
   taxCodeId?: string | null;
+  taxGroupId?: string | null;
 }
 
 /** A draft document with direct lines, written straight to storage so its date
@@ -289,9 +290,10 @@ async function seedPartyDocument(orgId: string, row: {
     for (const [index, line] of row.lines.entries()) {
       await db.execute(sql`
         insert into document_lines
-          (org_id, document_id, line_number, account_id, item_id, description, quantity, unit_price, amount, department_id, tax_code_id)
+          (org_id, document_id, line_number, account_id, item_id, description, quantity, unit_price, amount, department_id, tax_code_id, tax_group_id)
         values (${orgId}, ${id}, ${index + 1}, ${line.accountId ?? null}, ${line.itemId ?? null}, ${line.description ?? null},
-                ${line.quantity ?? "1"}, ${line.unitPrice ?? line.amount}, ${line.amount}, ${line.departmentId ?? null}, ${line.taxCodeId ?? null})`);
+                ${line.quantity ?? "1"}, ${line.unitPrice ?? line.amount}, ${line.amount}, ${line.departmentId ?? null}, ${line.taxCodeId ?? null},
+                ${line.taxGroupId ?? null})`);
     }
   });
   return id;
@@ -314,7 +316,7 @@ test("a vendor's default expense account wins over the vendor's own history", { 
       kind: "vendor_bill", partyId: s.org.vendorId, asOfDate: AS_OF, allowedSubsidiaryIds: null,
     }));
     assert.deepEqual(resolved, {
-      accountId: s.vendorDefaultExpense, accountSource: "party_default", taxCodeId: s.hstOn, taxSource: "party",
+      accountId: s.vendorDefaultExpense, accountSource: "party_default", taxCodeId: s.hstOn, taxGroupId: null, taxSource: "party",
     });
   } finally {
     await dropScratchOrg(s.org.orgId);
@@ -347,7 +349,7 @@ test("without a usable default, the most-used recent account is proposed and tie
       kind: "vendor_bill", partyId: s.org.vendorId, asOfDate: AS_OF, allowedSubsidiaryIds: null,
     }));
     assert.deepEqual(await resolve(), {
-      accountId: s.officeExpense, accountSource: "party_history", taxCodeId: null, taxSource: null, historyCount: 2,
+      accountId: s.officeExpense, accountSource: "party_history", taxCodeId: null, taxGroupId: null, taxSource: null, historyCount: 2,
     });
 
     // A second utilities bill ties the count; utilities was used more recently.
@@ -364,7 +366,91 @@ test("without a usable default, the most-used recent account is proposed and tie
     const credit = await withBypass(() => resolvePartyLineDefault(db, s.org.orgId, {
       kind: "vendor_credit", partyId: s.org.vendorId, asOfDate: AS_OF, allowedSubsidiaryIds: null,
     }));
-    assert.deepEqual(credit, { accountId: null, accountSource: null, taxCodeId: null, taxSource: null });
+    assert.deepEqual(credit, { accountId: null, accountSource: null, taxCodeId: null, taxGroupId: null, taxSource: null });
+  } finally {
+    await dropScratchOrg(s.org.orgId);
+  }
+});
+
+test("without a vendor tax code, new lines take the tax the vendor's history uses on the proposed account", { skip: !DB }, async () => {
+  const s = await seed();
+  try {
+    const [gst, qst, quebec] = [randomUUID(), randomUUID(), randomUUID()];
+    await withBypass(async () => {
+      await db.execute(sql`
+        insert into tax_codes (id, org_id, code, name) values (${gst}, ${s.org.orgId}, 'GST', 'GST'), (${qst}, ${s.org.orgId}, 'QST', 'QST')`);
+      await db.execute(sql`
+        insert into tax_rates (org_id, tax_code_id, rate_percent, effective_from)
+        values (${s.org.orgId}, ${s.hstOn}, '13', '2010-07-01'), (${s.org.orgId}, ${gst}, '5', '2008-01-01'),
+               (${s.org.orgId}, ${qst}, '9.975', '2013-01-01')`);
+      await db.execute(sql`insert into tax_groups (id, org_id, code, name) values (${quebec}, ${s.org.orgId}, 'GST+QST', 'Quebec')`);
+      await db.execute(sql`
+        insert into tax_group_members (tax_group_id, tax_code_id, sequence) values (${quebec}, ${gst}, 1), (${quebec}, ${qst}, 2)`);
+    });
+    const bill = (date: string, number: string, lines: SeedLine[]) =>
+      seedPartyDocument(s.org.orgId, { kind: "vendor_bill", partyId: s.org.vendorId, date, number, lines });
+    // On the vendor's default account: HST on three bills, untaxed on one.
+    for (const [index, date] of ["2026-06-01", "2026-07-01", "2026-08-01"].entries()) {
+      await bill(date, `B-HST-${index}`, [{ accountId: s.vendorDefaultExpense, amount: "100.0000", taxCodeId: s.hstOn }]);
+    }
+    await bill("2026-09-01", "B-NONE", [{ accountId: s.vendorDefaultExpense, amount: "100.0000" }]);
+    // On another account the vendor is mostly billed under the Quebec group.
+    for (const [index, date] of ["2026-05-01", "2026-05-02", "2026-05-03", "2026-05-04"].entries()) {
+      await bill(date, `B-QC-${index}`, [{ accountId: s.officeExpense, amount: "10.0000", taxGroupId: quebec }]);
+    }
+    const resolve = () => withBypass(() => resolvePartyLineDefault(db, s.org.orgId, {
+      kind: "vendor_bill", partyId: s.org.vendorId, asOfDate: AS_OF, allowedSubsidiaryIds: null,
+    }));
+
+    // The tax follows the proposed account's own history, not the vendor's overall habit.
+    assert.deepEqual(await resolve(), {
+      accountId: s.vendorDefaultExpense, accountSource: "party_default",
+      taxCodeId: s.hstOn, taxGroupId: null, taxSource: "party_history", taxHistoryCount: 3,
+    });
+
+    // An explicit vendor tax code always wins over history.
+    await withBypass(() => db.execute(sql`
+      update vendor_roles set tax_code_id = ${s.zeroRated} where org_id = ${s.org.orgId} and party_id = ${s.org.vendorId}`));
+    const explicit = await resolve();
+    assert.equal(explicit.taxCodeId, s.zeroRated);
+    assert.equal(explicit.taxSource, "party");
+    await withBypass(() => db.execute(sql`
+      update vendor_roles set tax_code_id = null where org_id = ${s.org.orgId} and party_id = ${s.org.vendorId}`));
+
+    // A code the bill cannot be taxed with never competes: retired, sales-only,
+    // or without a rate in force on the date. The untaxed bill then leads.
+    const unusable = [
+      sql`update tax_codes set is_active = false where id = ${s.hstOn}`,
+      sql`update tax_codes set applies_to = 'sales' where id = ${s.hstOn}`,
+      sql`update tax_rates set effective_to = '2026-06-30' where tax_code_id = ${s.hstOn}`,
+    ];
+    const restore = [
+      sql`update tax_codes set is_active = true where id = ${s.hstOn}`,
+      sql`update tax_codes set applies_to = 'both' where id = ${s.hstOn}`,
+      sql`update tax_rates set effective_to = null where tax_code_id = ${s.hstOn}`,
+    ];
+    for (const [index, change] of unusable.entries()) {
+      await withBypass(() => db.execute(change));
+      const resolved = await resolve();
+      assert.deepEqual([resolved.taxCodeId, resolved.taxGroupId, resolved.taxSource], [null, null, null], `case ${index}`);
+      await withBypass(() => db.execute(restore[index]!));
+    }
+
+    // An account with no history with the vendor learns from all of its lines.
+    const freshDefault = await withBypass(() => seedPostingAccount(s.org.orgId, "6950", "Unused expense", "expense"));
+    await withBypass(() => db.execute(sql`
+      update vendor_roles set default_expense_account_id = ${freshDefault} where org_id = ${s.org.orgId} and party_id = ${s.org.vendorId}`));
+    assert.deepEqual(await resolve(), {
+      accountId: freshDefault, accountSource: "party_default",
+      taxCodeId: null, taxGroupId: quebec, taxSource: "party_history", taxHistoryCount: 4,
+    });
+
+    // A group with a retired member is not a usable tax, so it is never proposed.
+    await withBypass(() => db.execute(sql`update tax_codes set is_active = false where id = ${qst}`));
+    const withoutGroup = await resolve();
+    assert.equal(withoutGroup.taxGroupId, null);
+    assert.equal(withoutGroup.taxCodeId, s.hstOn);
+    assert.equal(withoutGroup.taxHistoryCount, 3);
   } finally {
     await dropScratchOrg(s.org.orgId);
   }

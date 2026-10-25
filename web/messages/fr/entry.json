@@ -3,7 +3,9 @@
   "noPaymentTermsVendor": "Aucune condition de paiement pour {name} — définissez des conditions sur le fournisseur ou une valeur par défaut de la société",
   "partyDefault": {
     "configured": "Les nouvelles lignes utilisent {account}, le compte par défaut de {party}.",
-    "history": "Les nouvelles lignes utilisent {account}, utilisé sur {count, plural, one {# document récent} other {# documents récents}} de {party}."
+    "history": "Les nouvelles lignes utilisent {account}, utilisé sur {count, plural, one {# document récent} other {# documents récents}} de {party}.",
+    "taxConfigured": "Les nouvelles lignes utilisent la taxe {tax}, le code de taxe par défaut de {party}.",
+    "taxHistory": "Les nouvelles lignes utilisent la taxe {tax}, utilisée sur {count, plural, one {# document récent} other {# documents récents}} de {party}."
   },
   "controlTotal": {
     "label": "Total de contrôle",

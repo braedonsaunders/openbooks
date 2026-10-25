@@ -15,8 +15,11 @@ export interface PartyLineDefault {
   accountId: string | null
   accountSource: 'party_default' | 'party_history' | null
   taxCodeId: string | null
-  taxSource: 'party' | null
+  /** A tax group the party's history settles on; never set with `taxCodeId`. */
+  taxGroupId?: string | null
+  taxSource: 'party' | 'party_history' | null
   historyCount?: number
+  taxHistoryCount?: number
 }
 
 /** The party's most recent document of this kind, for recall. */
@@ -163,7 +166,8 @@ export function useDocumentDrawerEntry(scope: DocumentDrawerPickersScope) {
   }, [rows, memo])
 
   const defaultAccount = partyLine?.accountId && accountIds.has(partyLine.accountId) ? partyLine.accountId : ''
-  const defaultTax = config.hasTax && partyLine?.taxCodeId && taxValues.has(`code:${partyLine.taxCodeId}`) ? `code:${partyLine.taxCodeId}` : ''
+  const partyTaxValue = partyLine?.taxCodeId ? `code:${partyLine.taxCodeId}` : partyLine?.taxGroupId ? `group:${partyLine.taxGroupId}` : ''
+  const defaultTax = config.hasTax && partyTaxValue && taxValues.has(partyTaxValue) ? partyTaxValue : ''
 
   // Each line takes the party default once: when it first appears without
   // an item or account, or when the party changes while the line still
@@ -346,12 +350,19 @@ export function useDocumentDrawerEntry(scope: DocumentDrawerPickersScope) {
       ? t('partyDefault.history', { account: partyDefaultLabel, party: partyName, count: partyLine.historyCount ?? 0 })
       : t('partyDefault.configured', { account: partyDefaultLabel, party: partyName })
     : null
+  const partyTaxLabel = defaultTax ? (taxProfiles.find((profile) => profile.value === defaultTax)?.code ?? '') : ''
+  const partyTaxHint = partyTaxLabel
+    ? partyLine?.taxSource === 'party_history'
+      ? t('partyDefault.taxHistory', { tax: partyTaxLabel, party: partyName, count: partyLine.taxHistoryCount ?? 0 })
+      : t('partyDefault.taxConfigured', { tax: partyTaxLabel, party: partyName })
+    : null
 
   return {
     tEntry: t,
     localDate,
     partyLineDefault: partyLine,
     partyDefaultHint,
+    partyTaxHint,
     recentDocument: recent,
     recallAvailable,
     recall,

@@ -123,6 +123,7 @@ export function renderDocumentDrawerBody(scope: DocumentDrawerHeaderScope) {
     undoRecall,
     duplicates,
     partyDefaultHint,
+    partyTaxHint,
     hrefForDocument,
     nativeGoodsTaxAvailable,
   } = scope
@@ -489,6 +490,9 @@ export function renderDocumentDrawerBody(scope: DocumentDrawerHeaderScope) {
           />
           {editable && partyDefaultHint ? (
             <p className="text-[11px] text-slate-500 dark:text-slate-400">{partyDefaultHint}</p>
+          ) : null}
+          {editable && partyTaxHint ? (
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">{partyTaxHint}</p>
           ) : null}
         </div>
       ) : null}

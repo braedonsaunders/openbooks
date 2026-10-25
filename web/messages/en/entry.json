@@ -3,7 +3,9 @@
   "noPaymentTermsVendor": "No payment terms on {name} — set terms on the vendor or a company default",
   "partyDefault": {
     "configured": "New lines use {account}, the default account for {party}.",
-    "history": "New lines use {account}, used on {count, plural, one {# recent document} other {# recent documents}} from {party}."
+    "history": "New lines use {account}, used on {count, plural, one {# recent document} other {# recent documents}} from {party}.",
+    "taxConfigured": "New lines are taxed with {tax}, the default tax code for {party}.",
+    "taxHistory": "New lines are taxed with {tax}, used on {count, plural, one {# recent document} other {# recent documents}} from {party}."
   },
   "controlTotal": {
     "label": "Control total",

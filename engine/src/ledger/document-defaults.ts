@@ -7,6 +7,7 @@ import { subsidiaryVisibleFilter } from '../organization/subsidiary-scope.ts'
 import { isFeatureEnabled } from '../organization/feature-state.ts'
 import { docKindConfig, type DocKindConfig } from '../records/document-kinds.ts'
 import { loadCompanyReceivedNotBilledAccount } from '../records/control-accounts.ts'
+import { taxProfileMap } from './document-totals.ts'
 
 /**
  * Document header and line defaults: the one resolver behind the document
@@ -248,24 +249,28 @@ export async function resolveDocumentLineDefaults(
 }
 
 export type PartyLineAccountSource = 'party_default' | 'party_history'
+export type PartyLineTaxSource = 'party' | 'party_history'
 
 /**
- * The coding a new item-less line takes once the party is named. `historyCount`
- * accompanies `party_history`: how many of the party's recent documents used
- * the account, so the drawer can say why it was proposed.
+ * The coding a new item-less line takes once the party is named. A line's tax
+ * is a tax code or a tax group, never both. `historyCount` accompanies an
+ * account from `party_history` and `taxHistoryCount` a tax from
+ * `party_history`: how many of the party's recent documents used it, so the
+ * drawer can say why it was proposed.
  */
 export interface PartyLineDefault {
   accountId: string | null
   accountSource: PartyLineAccountSource | null
   taxCodeId: string | null
-  taxSource: 'party' | null
+  taxGroupId: string | null
+  taxSource: PartyLineTaxSource | null
   historyCount?: number
+  taxHistoryCount?: number
 }
 
-/** One account's use on a party's recent documents. */
-export type PartyAccountUsage = {
-  accountId: string
-  /** Distinct documents that used the account on at least one line. */
+/** When and how often a party's recent documents used one coding. */
+type PartyUsage = {
+  /** Distinct documents that used the coding on at least one line. */
   documentCount: number
   /** Latest document date (YYYY-MM-DD) among those documents. */
   lastDocumentDate: string
@@ -273,25 +278,50 @@ export type PartyAccountUsage = {
   lastCreatedAt: string
 };
 
-/** How far back party history is read when proposing a line account. */
+/** One account's use on a party's recent documents. */
+export type PartyAccountUsage = PartyUsage & { accountId: string };
+
+/**
+ * One tax treatment's use on a party's recent documents: a tax code, a tax
+ * group, or neither (lines entered without tax).
+ */
+export type PartyTaxUsage = PartyUsage & { taxCodeId: string | null; taxGroupId: string | null };
+
+/** How far back party history is read when proposing a line account or tax. */
 export const PARTY_HISTORY_WINDOW_DAYS = 365
 
 /**
- * The account a party's history proposes: the one used on the most documents;
- * ties go to the most recently used (document date, then entry time), and a
- * remaining tie to the lowest account id so the proposal is deterministic.
+ * The coding used on the most documents; ties go to the most recently used
+ * (document date, then entry time), and a remaining tie to the lowest key so
+ * the proposal is deterministic.
  */
-export function rankPartyAccountUsage(usage: readonly PartyAccountUsage[]): PartyAccountUsage | null {
-  let best: PartyAccountUsage | null = null
+function rankPartyUsage<T extends PartyUsage>(usage: readonly T[], key: (entry: T) => string): T | null {
+  let best: T | null = null
   for (const candidate of usage) {
     if (!best) { best = candidate; continue }
     const order = candidate.documentCount - best.documentCount
       || compareText(candidate.lastDocumentDate, best.lastDocumentDate)
       || compareText(candidate.lastCreatedAt, best.lastCreatedAt)
-      || compareText(best.accountId, candidate.accountId)
+      || compareText(key(best), key(candidate))
     if (order > 0) best = candidate
   }
   return best
+}
+
+/** The account a party's history proposes, ranked by `rankPartyUsage`. */
+export function rankPartyAccountUsage(usage: readonly PartyAccountUsage[]): PartyAccountUsage | null {
+  return rankPartyUsage(usage, (entry) => entry.accountId)
+}
+
+/**
+ * The tax treatment a party's history proposes, ranked by `rankPartyUsage`.
+ * Lines without tax compete like any code: a party mostly billed without tax
+ * yields the no-tax entry (both ids null), and a full tie resolves to no tax
+ * rather than a guess.
+ */
+export function rankPartyTaxUsage(usage: readonly PartyTaxUsage[]): PartyTaxUsage | null {
+  return rankPartyUsage(usage, (entry) =>
+    entry.taxCodeId ? `code:${entry.taxCodeId}` : entry.taxGroupId ? `group:${entry.taxGroupId}` : '')
 }
 
 function compareText(a: string, b: string): number {
@@ -304,10 +334,62 @@ function accountTypeFilter(cfg: DocKindConfig, column: SQL): SQL {
     : sql``
 }
 
-const NO_PARTY_LINE_DEFAULT: PartyLineDefault = { accountId: null, accountSource: null, taxCodeId: null, taxSource: null }
+const NO_TAX = { taxCodeId: null, taxGroupId: null, taxSource: null } as const
+const NO_PARTY_LINE_DEFAULT: PartyLineDefault = { accountId: null, accountSource: null, ...NO_TAX }
+
+/** The party's history window and scope, shared by the account and tax proposals. */
+function partyHistoryFilter(orgId: string, input: { kind: string; partyId: string; allowedSubsidiaryIds: ReadonlySet<string> | null }, asOf: string): SQL {
+  return sql`d.org_id = ${orgId} and d.kind = ${input.kind} and d.party_id = ${input.partyId}
+       and d.status <> 'voided'
+       and d.document_date between ${addCalendarDays(asOf, -PARTY_HISTORY_WINDOW_DAYS)}::date and ${asOf}::date
+       and l.item_id is null and l.promotion_id is null
+       ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, input.allowedSubsidiaryIds)}`
+}
+
+const PARTY_USAGE_COLUMNS = sql`count(distinct d.id)::int as "documentCount",
+           max(d.document_date)::text as "lastDocumentDate",
+           to_char((array_agg(d.created_at order by d.document_date desc, d.created_at desc))[1] at time zone 'UTC',
+                   'YYYY-MM-DD"T"HH24:MI:SS.US') as "lastCreatedAt"`
 
 /**
- * Account and tax code for an item-less line on a document of `kind` for this
+ * The tax treatment the party's history proposes for an item-less line coded
+ * to `accountId`: ranked over the lines that used that account, or over all
+ * of the party's item-less lines when no account is proposed or the account
+ * has no history with the party. Only a treatment the document can be taxed
+ * with on `asOf` competes: a code or group in the native effective tax
+ * profiles (active, with a rate in force), and a code that applies to this
+ * side of the ledger.
+ */
+async function resolvePartyHistoryTax(
+  exec: SqlExecutor,
+  orgId: string,
+  cfg: DocKindConfig,
+  input: { kind: string; partyId: string; allowedSubsidiaryIds: ReadonlySet<string> | null },
+  asOf: string,
+  accountId: string | null,
+): Promise<Pick<PartyLineDefault, 'taxCodeId' | 'taxGroupId' | 'taxSource' | 'taxHistoryCount'>> {
+  const appliesTo = cfg.lineDefaults === 'sales' ? 'sales' : 'purchases'
+  const usage = async (account: string | null) => (await exec.execute<PartyTaxUsage>(sql`
+    select l.tax_code_id as "taxCodeId", l.tax_group_id as "taxGroupId", ${PARTY_USAGE_COLUMNS}
+      from documents d
+      join document_lines l on l.org_id = d.org_id and l.document_id = d.id
+      left join tax_codes tc on tc.org_id = l.org_id and tc.id = l.tax_code_id
+     where ${partyHistoryFilter(orgId, input, asOf)}
+       ${account ? sql`and l.account_id = ${account}` : sql``}
+       and (l.tax_code_id is null or tc.applies_to in ('both', ${appliesTo}))
+     group by l.tax_code_id, l.tax_group_id`, 'objects')).map((row) => ({ ...row, documentCount: Number(row.documentCount) }))
+  let rows = accountId ? await usage(accountId) : []
+  if (rows.length === 0) rows = await usage(null)
+  if (rows.length === 0) return NO_TAX
+  const profiles = await taxProfileMap(orgId, asOf, exec)
+  const top = rankPartyTaxUsage(rows.filter((row) =>
+    row.taxCodeId ? profiles.codes.has(row.taxCodeId) : row.taxGroupId ? profiles.groups.has(row.taxGroupId) : true))
+  if (!top || (!top.taxCodeId && !top.taxGroupId)) return NO_TAX
+  return { taxCodeId: top.taxCodeId, taxGroupId: top.taxGroupId, taxSource: 'party_history', taxHistoryCount: top.documentCount }
+}
+
+/**
+ * Account and tax for an item-less line on a document of `kind` for this
  * party, before any item is chosen.
  *
  * Account. A vendor's default expense account wins on purchase documents.
@@ -319,7 +401,9 @@ const NO_PARTY_LINE_DEFAULT: PartyLineDefault = { accountId: null, accountSource
  * and never count. History is read inside the caller's subsidiary scope (null
  * is the explicit unrestricted sentinel).
  *
- * Tax. The party's own tax code, on kinds that carry tax.
+ * Tax, on kinds that carry tax. The party's own tax code wins. Otherwise the
+ * same history decides, as `resolvePartyHistoryTax` describes; a party whose
+ * history mostly carries no tax gets none.
  *
  * The usability rule is the line resolver's: active, non-summary accounts of a
  * type the kind allows and active tax codes. A party that is not an active
@@ -345,11 +429,10 @@ export async function resolvePartyLineDefault(
   ))[0]
   if (!party) return NO_PARTY_LINE_DEFAULT
 
-  const taxCodeId = cfg.hasTax && party.tax_code_id
+  const partyTaxCodeId = cfg.hasTax && party.tax_code_id
     ? (await exec.execute<{ id: string }>(sql`
         select id from tax_codes where org_id = ${orgId} and id = ${party.tax_code_id} and is_active`, 'objects'))[0]?.id ?? null
     : null
-  const tax = { taxCodeId, taxSource: taxCodeId ? 'party' as const : null }
 
   const vendorDefault = cfg.lineDefaults === 'purchase' && party.default_expense_account_id
     ? (await exec.execute<{ id: string }>(sql`
@@ -357,29 +440,32 @@ export async function resolvePartyLineDefault(
          where org_id = ${orgId} and id = ${party.default_expense_account_id}
            and is_active and not is_summary ${accountTypeFilter(cfg, sql`type`)}`, 'objects'))[0]?.id ?? null
     : null
-  if (vendorDefault) return { accountId: vendorDefault, accountSource: 'party_default', ...tax }
 
-  const asOf = input.asOfDate ?? await businessTodayInTx(exec, orgId)
-  const usage = await exec.execute<PartyAccountUsage>(sql`
-    select l.account_id as "accountId",
-           count(distinct d.id)::int as "documentCount",
-           max(d.document_date)::text as "lastDocumentDate",
-           to_char((array_agg(d.created_at order by d.document_date desc, d.created_at desc))[1] at time zone 'UTC',
-                   'YYYY-MM-DD"T"HH24:MI:SS.US') as "lastCreatedAt"
-      from documents d
-      join document_lines l on l.org_id = d.org_id and l.document_id = d.id
-      join accounts a on a.org_id = l.org_id and a.id = l.account_id
-                     and a.is_active and not a.is_summary ${accountTypeFilter(cfg, sql`a.type`)}
-     where d.org_id = ${orgId} and d.kind = ${input.kind} and d.party_id = ${input.partyId}
-       and d.status <> 'voided'
-       and d.document_date between ${addCalendarDays(asOf, -PARTY_HISTORY_WINDOW_DAYS)}::date and ${asOf}::date
-       and l.item_id is null and l.promotion_id is null
-       ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, input.allowedSubsidiaryIds)}
-     group by l.account_id`, 'objects')
-  const top = rankPartyAccountUsage(usage.map((row) => ({ ...row, documentCount: Number(row.documentCount) })))
-  return top
-    ? { accountId: top.accountId, accountSource: 'party_history', ...tax, historyCount: top.documentCount }
-    : { accountId: null, accountSource: null, ...tax }
+  // History is read only when a default is missing.
+  const needsHistory = !vendorDefault || (cfg.hasTax && !partyTaxCodeId)
+  const asOf = needsHistory ? input.asOfDate ?? await businessTodayInTx(exec, orgId) : null
+  let account: Pick<PartyLineDefault, 'accountId' | 'accountSource' | 'historyCount'> = vendorDefault
+    ? { accountId: vendorDefault, accountSource: 'party_default' }
+    : { accountId: null, accountSource: null }
+  if (!vendorDefault && asOf) {
+    const usage = await exec.execute<PartyAccountUsage>(sql`
+      select l.account_id as "accountId", ${PARTY_USAGE_COLUMNS}
+        from documents d
+        join document_lines l on l.org_id = d.org_id and l.document_id = d.id
+        join accounts a on a.org_id = l.org_id and a.id = l.account_id
+                       and a.is_active and not a.is_summary ${accountTypeFilter(cfg, sql`a.type`)}
+       where ${partyHistoryFilter(orgId, input, asOf)}
+       group by l.account_id`, 'objects')
+    const top = rankPartyAccountUsage(usage.map((row) => ({ ...row, documentCount: Number(row.documentCount) })))
+    if (top) account = { accountId: top.accountId, accountSource: 'party_history', historyCount: top.documentCount }
+  }
+
+  const tax = !cfg.hasTax
+    ? NO_TAX
+    : partyTaxCodeId
+      ? { taxCodeId: partyTaxCodeId, taxGroupId: null, taxSource: 'party' as const }
+      : asOf ? await resolvePartyHistoryTax(exec, orgId, cfg, input, asOf, account.accountId) : NO_TAX
+  return { ...account, ...tax }
 }
 
 export type RecalledDocumentLine = {

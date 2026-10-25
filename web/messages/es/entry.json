@@ -3,7 +3,9 @@
   "noPaymentTermsVendor": "No hay condiciones de pago para {name} — defina condiciones en el proveedor o un valor predeterminado de la empresa",
   "partyDefault": {
     "configured": "Las líneas nuevas usan {account}, la cuenta predeterminada de {party}.",
-    "history": "Las líneas nuevas usan {account}, utilizada en {count, plural, one {# documento reciente} other {# documentos recientes}} de {party}."
+    "history": "Las líneas nuevas usan {account}, utilizada en {count, plural, one {# documento reciente} other {# documentos recientes}} de {party}.",
+    "taxConfigured": "Las líneas nuevas llevan el impuesto {tax}, el código de impuesto predeterminado de {party}.",
+    "taxHistory": "Las líneas nuevas llevan el impuesto {tax}, utilizado en {count, plural, one {# documento reciente} other {# documentos recientes}} de {party}."
   },
   "controlTotal": {
     "label": "Total de control",

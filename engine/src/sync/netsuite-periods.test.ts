@@ -34,7 +34,7 @@ test("NetSuite fiscal periods retain the source close flags", () => {
   assert.equal(periods[1]?.fields.arLocked, false);
 });
 
-test("NetSuite transaction tax identities remain exact when item and group labels collide", () => {
+test("NetSuite tax codes keep the source names and mark a colliding group without internal ids", () => {
   const taxCodes = normalizeNetSuiteTaxCodes(
     [{ id: "2525", itemid: "HST", rate: "0.13", isinactive: "F" }],
     [
@@ -50,24 +50,28 @@ test("NetSuite transaction tax identities remain exact when item and group label
       ratePercent: code.fields.ratePercent,
     })),
     [
-      {
-        sourceRef: "2525",
-        code: "HST",
-        name: "HST",
-        ratePercent: "13.0000",
-      },
-      {
-        sourceRef: "2529",
-        code: "HST [grp:2529]",
-        name: "HST",
-        ratePercent: "13.0000",
-      },
-      {
-        sourceRef: "2823",
-        code: "HST_NB [grp:2823]",
-        name: "HST_NB",
-        ratePercent: "15.0000",
-      },
+      { sourceRef: "2525", code: "HST", name: "HST", ratePercent: "13.0000" },
+      { sourceRef: "2529", code: "HST (tax group)", name: "HST", ratePercent: "13.0000" },
+      { sourceRef: "2823", code: "HST_NB", name: "HST_NB", ratePercent: "15.0000" },
     ],
   );
+});
+
+test("NetSuite tax group codes stay unique and stable whatever order the source lists them in", () => {
+  const items = [{ id: "10", itemid: "GST", rate: "0.05", isinactive: "F" }];
+  const groups = [
+    { id: "31", itemid: "GST", rate: "0.05", isinactive: "F" },
+    { id: "30", itemid: "GST", rate: "0.15", isinactive: "T" },
+    { id: "32", itemid: "GST", rate: "0.05", isinactive: "F" },
+    { id: "33", itemid: "GST", rate: "0.05", isinactive: "F" },
+  ];
+  const codes = (rows: typeof groups) => Object.fromEntries(
+    normalizeNetSuiteTaxCodes(items, rows).map((code) => [code.sourceRef, code.fields.code]));
+  // Active groups take the plainer codes; the retired one is told apart by its rate.
+  const expected = { "10": "GST", "30": "GST (tax group, 15%)", "31": "GST (tax group)", "32": "GST (tax group, 5%)", "33": "GST (tax group 2)" };
+  assert.deepEqual(codes(groups), expected);
+  assert.deepEqual(codes([...groups].reverse()), expected);
+  for (const code of Object.values(expected).slice(1)) {
+    for (const group of groups) assert.equal(code.includes(group.id), false, `${code} names no internal id`);
+  }
 });

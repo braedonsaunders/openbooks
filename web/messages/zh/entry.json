@@ -3,7 +3,9 @@
   "noPaymentTermsVendor": "{name} 没有付款条件 — 请在供应商上设置付款条件，或设置公司默认值",
   "partyDefault": {
     "configured": "新行使用 {account}，即 {party} 的默认科目。",
-    "history": "新行使用 {account}，该科目曾用于 {party} 的{count, plural, one {# 份近期单据} other {# 份近期单据}}。"
+    "history": "新行使用 {account}，该科目曾用于 {party} 的{count, plural, one {# 份近期单据} other {# 份近期单据}}。",
+    "taxConfigured": "新行使用税码 {tax}，即 {party} 的默认税码。",
+    "taxHistory": "新行使用税码 {tax}，该税码曾用于 {party} 的{count, plural, one {# 份近期单据} other {# 份近期单据}}。"
   },
   "controlTotal": {
     "label": "控制总额",

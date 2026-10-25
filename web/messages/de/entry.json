@@ -3,7 +3,9 @@
   "noPaymentTermsVendor": "Keine Zahlungsbedingungen für {name} — legen Sie Bedingungen beim Lieferanten oder einen Unternehmensstandard fest",
   "partyDefault": {
     "configured": "Neue Zeilen verwenden {account}, das Standardkonto für {party}.",
-    "history": "Neue Zeilen verwenden {account}, zuletzt verwendet in {count, plural, one {# Beleg} other {# Belegen}} von {party}."
+    "history": "Neue Zeilen verwenden {account}, zuletzt verwendet in {count, plural, one {# Beleg} other {# Belegen}} von {party}.",
+    "taxConfigured": "Neue Zeilen werden mit {tax} besteuert, dem Standardsteuercode für {party}.",
+    "taxHistory": "Neue Zeilen werden mit {tax} besteuert, zuletzt verwendet in {count, plural, one {# Beleg} other {# Belegen}} von {party}."
   },
   "controlTotal": {
     "label": "Kontrollsumme",

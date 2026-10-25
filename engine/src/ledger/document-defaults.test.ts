@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { DocumentDefaultsError, dueDateFromNetDays, rankPartyAccountUsage } from "./document-defaults.ts";
+import { DocumentDefaultsError, dueDateFromNetDays, rankPartyAccountUsage, rankPartyTaxUsage } from "./document-defaults.ts";
 
 test("net days count calendar days from the document date across month and year ends", () => {
   assert.equal(dueDateFromNetDays("2026-07-20", 0), "2026-07-20");
@@ -41,4 +41,24 @@ test("equally used accounts rank by latest document date, then latest entry, the
   const tied = [usage("b", 2, "2026-09-01"), usage("a", 2, "2026-09-01")];
   assert.equal(rankPartyAccountUsage(tied)?.accountId, "a");
   assert.equal(rankPartyAccountUsage([...tied].reverse())?.accountId, "a");
+});
+
+const taxUsage = (key: string | null, documentCount: number, lastDocumentDate = "2026-09-01") => ({
+  taxCodeId: key?.startsWith("code:") ? key.slice(5) : null,
+  taxGroupId: key?.startsWith("group:") ? key.slice(6) : null,
+  documentCount, lastDocumentDate, lastCreatedAt: "2026-09-01T00:00:00.000000",
+});
+
+test("party tax history competes untaxed lines against codes and groups", () => {
+  assert.equal(rankPartyTaxUsage([]), null);
+  assert.deepEqual(rankPartyTaxUsage([taxUsage("code:hst", 9), taxUsage(null, 2), taxUsage("group:qc", 4)]), taxUsage("code:hst", 9));
+  assert.deepEqual(rankPartyTaxUsage([taxUsage("group:qc", 5), taxUsage("code:gst", 1)]), taxUsage("group:qc", 5));
+  // A party mostly billed without tax proposes no tax, never its minority code.
+  const untaxed = rankPartyTaxUsage([taxUsage("code:hst", 2), taxUsage(null, 6)]);
+  assert.equal(untaxed?.taxCodeId, null);
+  assert.equal(untaxed?.taxGroupId, null);
+  // A full tie with untaxed lines resolves to no tax rather than a guess.
+  const tied = [taxUsage("code:hst", 3), taxUsage(null, 3)];
+  assert.equal(rankPartyTaxUsage(tied)?.taxCodeId, null);
+  assert.equal(rankPartyTaxUsage([...tied].reverse())?.taxCodeId, null);
 });
