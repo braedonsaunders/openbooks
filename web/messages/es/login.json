@@ -30,7 +30,11 @@
     "setPassword": "Definir nueva contraseña",
     "saving": "Guardando…",
     "changed": "Su contraseña ha cambiado. Inicie sesión con ella ahora; las demás sesiones se han cerrado.",
-    "backToSignIn": "Volver al inicio de sesión"
+    "backToSignIn": "Volver al inicio de sesión",
+    "inviteTitle": "Bienvenido: establezca su contraseña para empezar",
+    "inviteSetPassword": "Establecer contraseña",
+    "inviteDone": "Su contraseña está establecida. Inicie sesión para empezar.",
+    "inviteInvalidToken": "Este enlace de invitación no es válido o ha caducado: pida a su administrador que reenvíe la invitación"
   },
   "forgotPassword": "¿Olvidó su contraseña?",
   "tooManyAttempts": "Demasiados intentos; inténtelo de nuevo en {seconds} segundos",

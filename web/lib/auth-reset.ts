@@ -2,7 +2,7 @@ import "server-only";
 import { createHash, randomBytes } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, withBypass } from "@openbooks/engine/platform/db";
-import { deriveEmailDeliveryKey, passwordResetEmail, sendVia, type EmailTransport } from "@openbooks/emails";
+import { deriveEmailDeliveryKey, passwordResetEmail, sendVia, userInvitationEmail, type EmailOut, type EmailTransport } from "@openbooks/emails";
 import {
   insertEmailLog,
   markEmailFailed,
@@ -11,6 +11,7 @@ import {
   resolveOrgEmailTransport,
 } from "@openbooks/engine/delivery/email-config/module";
 import { appBaseUrl } from "@openbooks/engine/flows/email-tokens";
+import type { EmailActor } from "@openbooks/schema";
 import { authContextHashes, hashPassword } from "./auth";
 import { normalizeLoginEmail, type AuthRequestContext } from "./auth-policy";
 
@@ -25,6 +26,12 @@ import { normalizeLoginEmail, type AuthRequestContext } from "./auth-policy";
  */
 
 export const RESET_TOKEN_TTL_MIN = 30;
+/**
+ * Invitation links set a new user's first password. They are issued by an
+ * administrator to a known address, so they outlive a self-service reset
+ * long enough to be opened on another working day.
+ */
+export const INVITE_TOKEN_TTL_DAYS = 7;
 export const MIN_PASSWORD_LENGTH = 10;
 /** New tokens per user per hour — a mailbox-flood cap, not a security control. */
 const REQUESTS_PER_HOUR = 3;
@@ -53,9 +60,13 @@ function tokenHash(raw: string): string {
   return createHash("sha256").update(raw).digest("hex");
 }
 
-/** Absolute set-password URL for a raw token — the same link the email carries. */
-export function setPasswordUrl(rawToken: string): string {
-  return `${appBaseUrl()}/login/reset?token=${rawToken}`;
+/**
+ * Absolute set-password URL for a raw token — the same link the email
+ * carries. Invitations add a presentation flag so the page welcomes a new
+ * user instead of describing a reset; it grants nothing.
+ */
+export function setPasswordUrl(rawToken: string, options: { invite?: boolean } = {}): string {
+  return `${appBaseUrl()}/login/reset?token=${rawToken}${options.invite ? "&invite=1" : ""}`;
 }
 
 /**
@@ -68,6 +79,7 @@ async function mintResetToken(
   userId: string,
   networkHash: string | null,
   userAgentHash: string | null,
+  ttlMinutes: number = RESET_TOKEN_TTL_MIN,
 ): Promise<string | null> {
   const recent = (await db.execute<{ n: number }>(sql`
     select count(*)::int as n from auth_password_resets
@@ -85,7 +97,7 @@ async function mintResetToken(
   await db.execute(sql`
     insert into auth_password_resets (user_id, token_hash, network_hash, user_agent_hash, expires_at)
     values (${userId}, ${tokenHash(raw)}, ${networkHash}, ${userAgentHash},
-            now() + make_interval(mins => ${RESET_TOKEN_TTL_MIN}))
+            now() + make_interval(mins => ${ttlMinutes}))
   `);
   return raw;
 }
@@ -128,17 +140,21 @@ async function isResetTokenCurrent(userId: string, raw: string): Promise<boolean
  * provider I/O from blocking password login or reset completion, which take
  * row locks elsewhere. Minting already committed before this runs, so the
  * credential itself is never held across provider I/O.
+ *
+ * An invitation carries its own message; without one the token is delivered
+ * as a self-service reset.
  */
 export async function deliverResetEmail(
   user: ResetRecipient,
   transport: EmailTransport,
   raw: string,
+  invitation?: CredentialMessage,
 ): Promise<boolean> {
   // bypass: identity-bootstrap — reset delivery re-reads the recipient's token and home identity; no session exists yet.
   return withBypass(async () => {
     await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${"password-reset-delivery:" + user.id}, 0))`);
     if (!(await isResetTokenCurrent(user.id, raw))) return false;
-    const message = passwordResetEmail({
+    const message = invitation?.message ?? passwordResetEmail({
       recipientName: user.name,
       resetUrl: setPasswordUrl(raw),
       expiresMinutes: RESET_TOKEN_TTL_MIN,
@@ -148,11 +164,11 @@ export async function deliverResetEmail(
       recipients: [user.email],
       subject: message.subject,
       status: "queued",
-      categoryKey: "password_reset",
-      // The reset requester is anonymous (never signed in), so no user id
-      // may be invented: explicit system provenance instead of a null that
-      // reads as missing attribution.
-      actor: { kind: "system", reason: "password reset delivery" },
+      categoryKey: invitation ? "user_invitation" : "password_reset",
+      // A reset requester is anonymous (never signed in), so no user id may
+      // be invented: explicit system provenance instead of a null that reads
+      // as missing attribution. An invitation names its issuing user.
+      actor: invitation?.actor ?? { kind: "system", reason: "password reset delivery" },
     });
     try {
       const outcome = await sendVia(transport, {
@@ -176,6 +192,8 @@ export async function deliverResetEmail(
     return true;
   });
 }
+
+type CredentialMessage = { message: EmailOut; actor: EmailActor };
 
 export async function requestPasswordReset(
   rawEmail: string,
@@ -257,6 +275,8 @@ export async function issueInviteSetPasswordLink(input: {
   user: ResetRecipient;
   context: AuthRequestContext;
   authorize?: () => Promise<void>;
+  /** Who issued the invitation: named in the email and its delivery log. */
+  inviter?: { userId: string; name: string | null } | null;
 }): Promise<InviteLinkIssuance | null> {
   const { networkHash, userAgentHash } = authContextHashes(input.context);
   // Mint first and commit: delivery re-checks currency in its own
@@ -266,16 +286,32 @@ export async function issueInviteSetPasswordLink(input: {
     // The authoritative ceiling re-check runs inside the mint transaction:
     // throwing rolls the mint back (no token, no email).
     if (input.authorize) await input.authorize();
-    const raw = await mintResetToken(input.user.id, networkHash, userAgentHash);
+    const raw = await mintResetToken(input.user.id, networkHash, userAgentHash, INVITE_TOKEN_TTL_DAYS * 24 * 60);
     if (!raw) return null;
     const transport = await resolveOrgEmailTransport(input.user.org_id);
-    return { raw, transport };
+    if (!transport) return { raw, transport, orgName: null };
+    const org = (await db.execute<{ name: string }>(sql`
+      select name from orgs where id = ${input.user.org_id}
+    `, "objects"))[0];
+    if (!org) throw new Error(`organization ${input.user.org_id} for the invited user does not exist`);
+    return { raw, transport, orgName: org.name };
   });
   if (!minted) return null;
-  if (!minted.transport) return { raw: minted.raw, emailQueued: false };
+  if (!minted.transport || minted.orgName === null) return { raw: minted.raw, emailQueued: false };
   // A superseded invite link is never emailed: the admin holds the raw
   // token from this same call, and sending a dead link would only confuse.
-  const delivered = await deliverResetEmail(input.user, minted.transport, minted.raw);
+  const delivered = await deliverResetEmail(input.user, minted.transport, minted.raw, {
+    message: userInvitationEmail({
+      recipientName: input.user.name,
+      orgName: minted.orgName,
+      inviterName: input.inviter?.name ?? null,
+      setPasswordUrl: setPasswordUrl(minted.raw, { invite: true }),
+      expiresDays: INVITE_TOKEN_TTL_DAYS,
+    }),
+    actor: input.inviter
+      ? { kind: "user", userId: input.inviter.userId }
+      : { kind: "system", reason: "user invitation delivery" },
+  });
   return { raw: minted.raw, emailQueued: delivered };
 }
 

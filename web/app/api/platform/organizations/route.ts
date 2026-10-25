@@ -62,6 +62,7 @@ export const POST = defineRoute({
       issuance = await issueInviteSetPasswordLink({
         user: { id: administrator.userId, org_id: created.orgId, name: administrator.name, email: administrator.email },
         context: authRequestContext(request),
+        inviter: { userId: actorId, name: authz.user.name },
         // Re-verified inside the mint transaction: the operator must still be
         // an active super administrator, and the administrator must still be
         // a pending invitation, before any link exists.
@@ -123,7 +124,7 @@ export const POST = defineRoute({
         emailQueued: issuance.emailQueued,
         // One-time operator copy, present only when no mailbox carried it.
         // Never persisted or logged; the stored SHA-256 cannot reproduce it.
-        ...(issuance.emailQueued ? {} : { setPasswordUrl: setPasswordUrl(issuance.raw) }),
+        ...(issuance.emailQueued ? {} : { setPasswordUrl: setPasswordUrl(issuance.raw, { invite: true }) }),
       },
       { status: 201 },
     );

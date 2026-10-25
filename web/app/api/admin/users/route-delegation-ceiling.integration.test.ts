@@ -67,6 +67,7 @@ registerHooks({
         const state = globalThis[Symbol.for('openbooks.admin-users-delegation-ceiling')];
         export const deriveEmailDeliveryKey = () => 'isolated-delivery';
         export const passwordResetEmail = ({ resetUrl }) => ({ subject: 'Set your password', text: resetUrl, html: resetUrl });
+        export const userInvitationEmail = ({ setPasswordUrl }) => ({ subject: 'You are invited', text: setPasswordUrl, html: setPasswordUrl });
         export async function sendVia(transport, message) {
           state.deliveries.push({ to: message.to });
           return { kind: 'sent', providerMessageId: 'isolated' };

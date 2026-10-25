@@ -1251,7 +1251,7 @@
     "inviteResend": "Resend invite",
     "inviteResent": "Invitation re-sent to {email}",
     "inviteLinkTitle": "Set-password link",
-    "inviteLinkOneTime": "Email delivery is not configured, so copy this link and send it to them yourself. It is shown once and expires in 30 minutes.",
+    "inviteLinkOneTime": "Email delivery is not configured, so copy this link and send it to them yourself. It is shown once and expires in 7 days.",
     "inviteCopyLink": "Copy link",
     "inviteCopied": "Link copied",
     "inviteCopyFailed": "Could not copy the link — select it manually",

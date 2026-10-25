@@ -63,6 +63,7 @@ registerHooks({
         const state = globalThis[Symbol.for('openbooks.admin-invite-integration')];
         export const deriveEmailDeliveryKey = () => 'isolated-delivery';
         export const passwordResetEmail = ({ resetUrl }) => ({ subject: 'Set your password', text: resetUrl, html: resetUrl });
+        export const userInvitationEmail = ({ setPasswordUrl }) => ({ subject: 'You are invited', text: setPasswordUrl, html: setPasswordUrl });
         export async function sendVia(transport, message) {
           state.deliveries.push({ to: message.to, subject: message.subject, html: message.html, text: message.text });
           return { kind: 'sent', providerMessageId: 'isolated' };
@@ -168,12 +169,17 @@ test("invite creates the user, assigns the role, and issues a working set-passwo
     const resets = (await withBypassContext(() => db.execute<{ n: number }>(sql`select count(*)::int as n from auth_password_resets
         where user_id = ${user!.id} and used_at is null and expires_at > now()`, "objects")))[0]!.n;
     assert.equal(resets, 1);
+    // An invitation outlives a self-service reset: it must still work when
+    // opened on another working day.
+    const lifetime = (await withBypassContext(() => db.execute<{ hours: number }>(sql`select extract(epoch from expires_at - created_at)::float / 3600 as hours
+        from auth_password_resets where user_id = ${user!.id} and used_at is null`, "objects")))[0]!.hours;
+    assert.ok(Math.abs(lifetime - 7 * 24) < 0.1, `invitation link lives 7 days, got ${lifetime}h`);
     assert.equal(state.deliveries.length, 1);
     assert.equal(state.deliveries[0]!.to, NEW_EMAIL);
-    assert.match(state.deliveries[0]!.text, /\/login\/reset\?token=/);
+    assert.match(state.deliveries[0]!.text, /\/login\/reset\?token=[^&]+&invite=1$/);
     assert.deepEqual(
       state.emailLogs.map((log) => [log.recipients, log.categoryKey]),
-      [[[NEW_EMAIL], "password_reset"]],
+      [[[NEW_EMAIL], "user_invitation"]],
     );
 
     // The real Users loader shows the invite as pending while the

@@ -30,7 +30,11 @@
     "setPassword": "新しいパスワードを設定する",
     "saving": "保存中…",
     "changed": "パスワードを変更しました。今すぐ新しいパスワードでサインインしてください — 他のセッションはすべてサインアウトしました。",
-    "backToSignIn": "サインインに戻る"
+    "backToSignIn": "サインインに戻る",
+    "inviteTitle": "ようこそ — パスワードを設定して始めましょう",
+    "inviteSetPassword": "パスワードを設定",
+    "inviteDone": "パスワードを設定しました。サインインして始めましょう。",
+    "inviteInvalidToken": "この招待リンクは無効か期限切れです — 管理者に招待の再送を依頼してください"
   },
   "forgotPassword": "パスワードをお忘れですか？",
   "tooManyAttempts": "試行回数が多すぎます — {seconds} 秒後に再試行してください",

@@ -203,6 +203,46 @@ export function passwordResetEmail(args: {
   return { subject, html, text }
 }
 
+/**
+ * Invitation to a new user. The link sets their first password and is
+ * single-use; it lives long enough to be opened on another working day, and
+ * the email states when it expires so a stale link explains itself.
+ */
+export function userInvitationEmail(args: {
+  recipientName?: string | null
+  orgName: string
+  inviterName?: string | null
+  setPasswordUrl: string
+  expiresDays: number
+}): EmailOut {
+  const subject = `You're invited to ${args.orgName} on OpenBooks`
+  const greeting = args.recipientName ? `Hi ${args.recipientName},` : 'Hi,'
+  const inviter = args.inviterName?.trim()
+  const lead = inviter
+    ? `${inviter} has invited you to ${args.orgName} on OpenBooks.`
+    : `You have been invited to ${args.orgName} on OpenBooks.`
+  const days = args.expiresDays === 1 ? '1 day' : `${args.expiresDays} days`
+  const text =
+    `${greeting}\n\n` +
+    `${lead} Open this link to set your password and sign in:\n\n` +
+    `${args.setPasswordUrl}\n\n` +
+    `The link works once and expires in ${days}. ` +
+    `If you weren't expecting this invitation, you can ignore this email.`
+  const html = shell({
+    heading: `Join ${args.orgName}`,
+    bodyHtml: `
+      <p>${esc(greeting)}</p>
+      <p>${esc(lead)}</p>
+      <p style="margin:20px 0">
+        <a href="${esc(args.setPasswordUrl)}" style="display:inline-block;padding:10px 20px;background:#0d9488;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">Set your password</a>
+      </p>
+      <p style="color:#666">The link works once and expires in ${esc(days)}.
+      If you weren't expecting this invitation, you can ignore this email.</p>`,
+    footer: `Sent by ${args.orgName} via OpenBooks.`,
+  })
+  return { subject, html, text }
+}
+
 /** Cover email for a transaction (invoice, quote, PO, …) sent to its party; the
  *  rendered document rides as a PDF attachment. An optional free-text `message`
  *  from the sender is shown above the standard line. */

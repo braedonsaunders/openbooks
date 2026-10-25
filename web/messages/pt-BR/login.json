@@ -30,7 +30,11 @@
     "setPassword": "Definir nova senha",
     "saving": "Salvando…",
     "changed": "Sua senha foi alterada. Entre com ela agora — as outras sessões foram encerradas.",
-    "backToSignIn": "Voltar ao login"
+    "backToSignIn": "Voltar ao login",
+    "inviteTitle": "Boas-vindas — defina sua senha para começar",
+    "inviteSetPassword": "Definir senha",
+    "inviteDone": "Sua senha foi definida. Entre para começar.",
+    "inviteInvalidToken": "Este link de convite é inválido ou expirou — peça ao administrador para reenviar o convite"
   },
   "forgotPassword": "Esqueceu a senha?",
   "tooManyAttempts": "Tentativas demais — tente de novo em {seconds} segundos",

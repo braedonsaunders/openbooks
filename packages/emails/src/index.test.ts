@@ -3,10 +3,32 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import test from "node:test";
 import { buildSmtpIdentity, deriveEmailDeliveryKey, EMAIL_DELIVERY_ID_HEADER } from "./outcome";
-import { documentEmail, sendVia, type EmailTransport } from "./index";
+import { documentEmail, sendVia, userInvitationEmail, type EmailTransport } from "./index";
 
 const TEST_ORG = "018f6b2a-7c1d-7d3e-9f4a-2b8c4d5e6f70";
 const testKey = (scope: string) => deriveEmailDeliveryKey({ orgId: TEST_ORG, scope, to: "dana@example.com" });
+
+test("userInvitationEmail names the organization and inviter, carries the link, and states the expiry", () => {
+  const url = "https://books.example.com/login/reset?token=abc&invite=1";
+  const invite = userInvitationEmail({
+    recipientName: "Dana",
+    orgName: "Acme <Corp>",
+    inviterName: "Lee Park",
+    setPasswordUrl: url,
+    expiresDays: 7,
+  });
+  assert.equal(invite.subject, "You're invited to Acme <Corp> on OpenBooks");
+  assert.ok(invite.text.includes("Lee Park has invited you to Acme <Corp> on OpenBooks."));
+  assert.ok(invite.text.includes(url));
+  assert.ok(invite.text.includes("expires in 7 days"));
+  assert.ok(invite.html.includes("Acme &lt;Corp&gt;"), "organization name is escaped in html");
+  assert.ok(!invite.html.includes("Acme <Corp>"));
+  assert.ok(invite.html.includes(url.replace("&", "&amp;")));
+
+  const anonymous = userInvitationEmail({ orgName: "Acme", setPasswordUrl: url, expiresDays: 1 });
+  assert.ok(anonymous.text.startsWith("Hi,\n\nYou have been invited to Acme on OpenBooks."));
+  assert.ok(anonymous.text.includes("expires in 1 day."));
+});
 
 test("documentEmail renders the payment link as a call-to-action in html and text", () => {
   const withLink = documentEmail({

@@ -30,7 +30,11 @@
     "setPassword": "Neues Passwort festlegen",
     "saving": "Wird gespeichert…",
     "changed": "Ihr Passwort wurde geändert. Melden Sie sich jetzt damit an — alle anderen Sitzungen wurden abgemeldet.",
-    "backToSignIn": "Zurück zur Anmeldung"
+    "backToSignIn": "Zurück zur Anmeldung",
+    "inviteTitle": "Willkommen — legen Sie Ihr Passwort fest, um loszulegen",
+    "inviteSetPassword": "Passwort festlegen",
+    "inviteDone": "Ihr Passwort ist festgelegt. Melden Sie sich an, um loszulegen.",
+    "inviteInvalidToken": "Dieser Einladungslink ist ungültig oder abgelaufen — bitten Sie Ihren Administrator, die Einladung erneut zu senden"
   },
   "forgotPassword": "Passwort vergessen?",
   "tooManyAttempts": "Zu viele Versuche — versuchen Sie es in {seconds} Sekunden erneut",

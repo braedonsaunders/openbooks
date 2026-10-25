@@ -38,7 +38,7 @@ registerHooks({
     if (specifier === "next/navigation") {
       return {
         shortCircuit: true,
-        url: "data:text/javascript,export function useRouter(){return {push(){},replace(){},refresh(){}}}export function usePathname(){return '/login/reset'}export function useSearchParams(){return new URLSearchParams()}",
+        url: "data:text/javascript,export function useRouter(){return {push(){},replace(){},refresh(){}}}export function usePathname(){return '/login/reset'}export function useSearchParams(){return new URLSearchParams(globalThis.__resetSearch||'')}",
       };
     }
     if (specifier === "next/link") {
@@ -178,6 +178,44 @@ test("a rejected request surfaces the failure alert instead of claiming success"
     assert.ok(alert?.includes(FAILURE_COPY), `a dropped request renders the failure copy (saw: ${alert})`);
     assert.ok(!bodyText().includes(SENT_COPY), "the sent copy must not render when nothing was asked");
   } finally {
+    await cleanup();
+  }
+});
+
+async function fillPassword(selector: string, value: string): Promise<void> {
+  const input = document.querySelector(selector) as HTMLInputElement | null;
+  assert.ok(input, `the set-password form offers ${selector}`);
+  await act(async () => {
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+    setter?.call(input, value);
+    input.dispatchEvent(new window.Event("input", { bubbles: true }));
+    await tick();
+  });
+}
+
+test("an invitation link welcomes a new user and confirms their first password", async () => {
+  const search = globalThis as { __resetSearch?: string };
+  search.__resetSearch = "token=invite-token&invite=1";
+  const script: FetchScript = { calls: [], respond: async () => Response.json({ ok: true }) };
+  const cleanup = await mount(script);
+  try {
+    assert.ok(bodyText().includes("Welcome — set your password to get started"), "the invitation is greeted as a first sign-in");
+    assert.ok(!bodyText().includes("Choose a new password"), "reset wording does not render for an invitation");
+    await fillPassword("#new-password", "A first password 2026");
+    await fillPassword("#confirm-password", "A first password 2026");
+    const submit = document.querySelector('button[type="submit"]') as HTMLButtonElement | null;
+    assert.equal(submit?.textContent, "Set password");
+    await act(async () => {
+      submit!.click();
+      await tick(60);
+    });
+    await tick(60);
+    assert.equal(script.calls.length, 1);
+    assert.equal(JSON.parse(script.calls[0]!.body).token, "invite-token");
+    assert.ok(bodyText().includes("Your password is set. Sign in to get started."));
+    assert.ok(!bodyText().includes("all other sessions were signed out"), "an invitation does not describe a reset");
+  } finally {
+    delete search.__resetSearch;
     await cleanup();
   }
 });

@@ -887,10 +887,11 @@ export const POST = defineRoute({
           return { userId: existing.id, email: existing.email, name: existing.name, resumed: true };
         }));
         if (created instanceof NextResponse) return created;
-        // The set-password link travels the ordinary password-reset mail path,
-        // so delivery, logging and expiry behave exactly like a self-service
-        // reset. Mail trouble must not roll the user back: the invite stays
-        // pending and the mailbox owner can always request a fresh link. When
+        // The set-password link travels the password-reset mail path as an
+        // invitation email with a multi-day expiry, so delivery and logging
+        // behave like a self-service reset. Mail trouble must not roll the
+        // user back: the invite stays pending and an administrator can resend
+        // it, or the mailbox owner can request a fresh link. When
         // no email transport exists the raw link is handed to the admin
         // one-time in this response instead — still pending, still single-use.
         // The authorize hook re-verifies the caller's ceiling against the
@@ -901,6 +902,7 @@ export const POST = defineRoute({
           issuance = await issueInviteSetPasswordLink({
             user: { id: created.userId, org_id: actor.orgId, name: created.name, email: created.email },
             context: authRequestContext(request),
+            inviter: { userId: actor.id, name: actor.name },
             authorize: () => authorizeInviteIssuance({
               orgId: actor.orgId,
               targetUserId: created.userId,
@@ -939,7 +941,7 @@ export const POST = defineRoute({
           // One-time admin copy: present only when the mailbox could not carry
           // it. Never persisted, never logged — the stored SHA-256 cannot
           // reproduce it.
-          ...(issuance.emailQueued ? {} : { setPasswordUrl: setPasswordUrl(issuance.raw) }),
+          ...(issuance.emailQueued ? {} : { setPasswordUrl: setPasswordUrl(issuance.raw, { invite: true }) }),
         });
       }
       case "resend-invite": {
@@ -982,6 +984,7 @@ export const POST = defineRoute({
           issuance = await issueInviteSetPasswordLink({
             user: { id: target.id, org_id: actor.orgId, name: target.name, email: target.email },
             context: authRequestContext(request),
+            inviter: { userId: actor.id, name: actor.name },
             authorize: () => authorizeInviteIssuance({
               orgId: actor.orgId,
               targetUserId: target.id,
@@ -1014,7 +1017,7 @@ export const POST = defineRoute({
           ok: true,
           userId: target.id,
           emailQueued: issuance.emailQueued,
-          ...(issuance.emailQueued ? {} : { setPasswordUrl: setPasswordUrl(issuance.raw) }),
+          ...(issuance.emailQueued ? {} : { setPasswordUrl: setPasswordUrl(issuance.raw, { invite: true }) }),
         });
       }
       default:

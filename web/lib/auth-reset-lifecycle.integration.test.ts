@@ -100,6 +100,7 @@ const consolidatedRows = [
               return { shortCircuit: true, url: `data:text/javascript,${encodeURIComponent(`
                 export const deriveEmailDeliveryKey = () => 'isolated-delivery';
                 export const passwordResetEmail = ({resetUrl}) => ({subject:'Reset',text:resetUrl,html:resetUrl});
+                export const userInvitationEmail = ({ setPasswordUrl }) => ({ subject: 'You are invited', text: setPasswordUrl, html: setPasswordUrl });
                 export async function sendVia(transport, message) {
                   await globalThis[Symbol.for('openbooks.reset-before-delivery-test')]?.();
                   globalThis[Symbol.for('openbooks.reset-concurrency-test')].push(message.text);
@@ -273,6 +274,7 @@ const consolidatedRows = [
               return { shortCircuit: true, url: `data:text/javascript,${encodeURIComponent(`
                 export const deriveEmailDeliveryKey = () => 'isolated-delivery';
                 export const passwordResetEmail = ({resetUrl}) => ({subject:'Reset',text:resetUrl,html:resetUrl});
+                export const userInvitationEmail = ({ setPasswordUrl }) => ({ subject: 'You are invited', text: setPasswordUrl, html: setPasswordUrl });
                 export async function sendVia(transport, message) {
                   const ordered = globalThis[Symbol.for('openbooks.reset-delivery-order-test')];
                   const concurrent = globalThis[Symbol.for('openbooks.reset-concurrency-test')];

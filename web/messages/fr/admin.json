@@ -1267,7 +1267,7 @@
     "inviteResend": "Renvoyer l’invitation",
     "inviteResent": "Invitation renvoyée à {email}",
     "inviteLinkTitle": "Lien de mot de passe",
-    "inviteLinkOneTime": "L’envoi de courriels n’est pas configuré : copiez ce lien et envoyez-le vous-même. Il n’est affiché qu’une fois et expire dans 30 minutes.",
+    "inviteLinkOneTime": "L’envoi de courriels n’est pas configuré : copiez ce lien et envoyez-le vous-même. Il n’est affiché qu’une fois et expire dans 7 jours.",
     "inviteCopyLink": "Copier le lien",
     "inviteCopied": "Lien copié",
     "inviteCopyFailed": "Copie impossible — sélectionnez le lien manuellement",

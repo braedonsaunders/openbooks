@@ -30,7 +30,11 @@
     "setPassword": "设置新密码",
     "saving": "保存中…",
     "changed": "密码已修改。请立即使用新密码登录——其他会话均已退出。",
-    "backToSignIn": "返回登录"
+    "backToSignIn": "返回登录",
+    "inviteTitle": "欢迎 — 设置密码即可开始",
+    "inviteSetPassword": "设置密码",
+    "inviteDone": "密码已设置。请登录开始使用。",
+    "inviteInvalidToken": "此邀请链接无效或已过期 — 请让管理员重新发送邀请"
   },
   "forgotPassword": "忘记密码？",
   "tooManyAttempts": "尝试次数过多——请在 {seconds} 秒后重试",

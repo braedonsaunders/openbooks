@@ -1268,7 +1268,7 @@
     "inviteResend": "重新发送邀请",
     "inviteResent": "已将邀请重新发送至 {email}",
     "inviteLinkTitle": "密码设置链接",
-    "inviteLinkOneTime": "未配置邮件发送，请复制此链接并自行发送给对方。该链接仅显示一次，30分钟后过期。",
+    "inviteLinkOneTime": "未配置邮件发送，请复制此链接并自行发送给对方。该链接仅显示一次，7天后过期。",
     "inviteCopyLink": "复制链接",
     "inviteCopied": "链接已复制",
     "inviteCopyFailed": "复制失败 — 请手动选择链接",

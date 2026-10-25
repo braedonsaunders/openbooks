@@ -30,7 +30,11 @@
     "setPassword": "Définir le nouveau mot de passe",
     "saving": "Enregistrement…",
     "changed": "Votre mot de passe a été modifié. Ouvrez une session avec ce mot de passe — toutes les autres sessions ont été fermées.",
-    "backToSignIn": "Retour à l’ouverture de session"
+    "backToSignIn": "Retour à l’ouverture de session",
+    "inviteTitle": "Bienvenue — définissez votre mot de passe pour commencer",
+    "inviteSetPassword": "Définir le mot de passe",
+    "inviteDone": "Votre mot de passe est défini. Ouvrez une session pour commencer.",
+    "inviteInvalidToken": "Ce lien d’invitation est invalide ou a expiré — demandez à votre administrateur de renvoyer l’invitation"
   },
   "forgotPassword": "Mot de passe oublié ?",
   "tooManyAttempts": "Trop de tentatives — réessayez dans {seconds} secondes",

@@ -10,13 +10,15 @@ import { readApiErrorMessage } from '@/lib/api-error'
 /**
  * Password reset. Without ?token= this asks for the account email and always
  * reports "link sent" (no account enumeration). With ?token= it collects the
- * new password and confirms, then routes back to sign-in.
+ * new password and confirms, then routes back to sign-in. An invitation
+ * link (?invite=1) uses the same token flow with first-password wording.
  */
 function ResetForm() {
   const t = useTranslations('login')
   const tCommon = useTranslations('common')
   const params = useSearchParams()
   const token = params.get('token')
+  const invite = Boolean(token) && params.get('invite') === '1'
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -66,7 +68,7 @@ function ResetForm() {
       // mapped copy while every other refusal reads through the shared
       // helper with message, remedy and code.
       const data = (await res.clone().json().catch(() => ({}))) as { error?: string }
-      setError(data.error === 'weak_password' ? t('reset.weakPassword') : await readApiErrorMessage(res, t('reset.invalidToken')))
+      setError(data.error === 'weak_password' ? t('reset.weakPassword') : await readApiErrorMessage(res, t(invite ? 'reset.inviteInvalidToken' : 'reset.invalidToken')))
     }
     setBusy(false)
   }
@@ -80,14 +82,14 @@ function ResetForm() {
               open<span className="text-teal-600 dark:text-teal-400">books</span>
             </h1>
             <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-              {token ? t('reset.chooseTitle') : t('reset.requestTitle')}
+              {invite ? t('reset.inviteTitle') : token ? t('reset.chooseTitle') : t('reset.requestTitle')}
             </p>
           </div>
 
           {done ? (
             <div className="space-y-4 text-center">
               <p className="text-sm text-slate-600 dark:text-slate-300">
-                {token ? t('reset.changed') : t('reset.sent')}
+                {invite ? t('reset.inviteDone') : token ? t('reset.changed') : t('reset.sent')}
               </p>
               <Button asChild className="h-11 w-full text-base font-semibold">
                 <Link href="/login">{t('reset.backToSignIn')}</Link>
@@ -126,7 +128,7 @@ function ResetForm() {
                 <p className="text-sm text-red-600 dark:text-red-400" role="alert">{error}</p>
               ) : null}
               <Button type="submit" disabled={busy} className="h-11 w-full text-base font-semibold">
-                {busy ? t('reset.saving') : t('reset.setPassword')}
+                {busy ? t('reset.saving') : t(invite ? 'reset.inviteSetPassword' : 'reset.setPassword')}
               </Button>
             </form>
           ) : (

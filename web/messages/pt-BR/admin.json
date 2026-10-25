@@ -1268,7 +1268,7 @@
     "inviteResend": "Reenviar convite",
     "inviteResent": "Convite reenviado para {email}",
     "inviteLinkTitle": "Link de senha",
-    "inviteLinkOneTime": "O envio de e-mails não está configurado — copie este link e envie você mesmo. Ele é exibido uma única vez e expira em 30 minutos.",
+    "inviteLinkOneTime": "O envio de e-mails não está configurado — copie este link e envie você mesmo. Ele é exibido uma única vez e expira em 7 dias.",
     "inviteCopyLink": "Copiar link",
     "inviteCopied": "Link copiado",
     "inviteCopyFailed": "Não foi possível copiar o link — selecione-o manualmente",

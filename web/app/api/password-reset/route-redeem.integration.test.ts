@@ -27,6 +27,7 @@ registerHooks({
       return virtual(`
         export const deriveEmailDeliveryKey = () => 'isolated-delivery';
         export const passwordResetEmail = ({ resetUrl }) => ({ subject: 'Set your password', text: resetUrl, html: resetUrl });
+        export const userInvitationEmail = ({ setPasswordUrl }) => ({ subject: 'You are invited', text: setPasswordUrl, html: setPasswordUrl });
         export async function sendVia() { return { kind: 'sent', providerMessageId: 'isolated' }; }
       `);
     }

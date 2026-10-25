@@ -87,6 +87,10 @@ const mockSources = new Map<string, string>([
         state.messageInputs.push(input)
         return { subject: 'Reset your password', html: input.resetUrl, text: input.resetUrl }
       }
+      export function userInvitationEmail(input) {
+        state.messageInputs.push(input)
+        return { subject: 'You are invited', html: input.setPasswordUrl, text: input.setPasswordUrl }
+      }
       export async function sendVia(transport, message) {
         state.deliveries.push({ transport, message })
         return { kind: 'sent', providerMessageId: 'provider-message-1' }

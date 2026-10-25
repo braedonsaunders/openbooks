@@ -33,6 +33,10 @@
     "setPassword": "Set new password",
     "saving": "Saving…",
     "changed": "Your password has been changed. Sign in with it now — all other sessions were signed out.",
-    "backToSignIn": "Back to sign in"
+    "backToSignIn": "Back to sign in",
+    "inviteTitle": "Welcome — set your password to get started",
+    "inviteSetPassword": "Set password",
+    "inviteDone": "Your password is set. Sign in to get started.",
+    "inviteInvalidToken": "This invitation link is invalid or has expired — ask your administrator to resend the invite"
   }
 }
