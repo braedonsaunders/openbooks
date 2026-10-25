@@ -50,6 +50,7 @@ import {
   captureTransactionAuditSnapshot,
   recordTransactionAudit,
 } from "../records/transaction-audit.ts";
+import { documentNumberScopeKey } from "../records/numbering.ts";
 import {
   computeImportedLineTaxEvidence,
   loadTaxComponentConfig,
@@ -811,25 +812,31 @@ export function collisionSafeSourceDocumentNumber(
   return `${effectiveSourceDocumentNumber(d)}${suffix}`;
 }
 
-function documentNumberOwnerKey(kind: string, documentNumber: string): string {
-  return `${kind}\u0000${documentNumber}`;
-}
-
-function resolveSourceDocumentNumber(
+/**
+ * The source number a document should hold: its own clean number unless
+ * another document already holds that number in the same storage uniqueness
+ * slot. A vendor bill or credit competes only with the same vendor's
+ * documents, so another vendor's identical invoice number never forces the
+ * collision-safe form, and a document stored under that form returns to its
+ * clean number once the clean number is free for its vendor.
+ * `partyId` is the party the stored row will carry after this write.
+ */
+export function resolveSourceDocumentNumber(
   d: NativeDocument,
   sourceName: string,
   currentDocumentId: string | undefined,
   numberOwners: ReadonlyMap<string, string>,
+  partyId: string | null = d.partyId,
 ): string {
   const preferred = effectiveSourceDocumentNumber(d);
   const preferredOwner = numberOwners.get(
-    documentNumberOwnerKey(d.kind, preferred),
+    documentNumberScopeKey(d.kind, partyId, preferred),
   );
   if (!preferredOwner || preferredOwner === currentDocumentId) return preferred;
 
   const alternate = collisionSafeSourceDocumentNumber(d, sourceName);
   const alternateOwner = numberOwners.get(
-    documentNumberOwnerKey(d.kind, alternate),
+    documentNumberScopeKey(d.kind, partyId, alternate),
   );
   if (alternateOwner && alternateOwner !== currentDocumentId) {
     throw new Error(
@@ -1069,9 +1076,10 @@ export async function preflightFullSync(
       kind: string;
       status: string;
       document_number: string;
+      party_id: string | null;
       ref: string | null;
     }>(sql`
-    select id, kind, status, document_number, custom->>${source.refKey} as ref
+    select id, kind, status, document_number, party_id, custom->>${source.refKey} as ref
       from documents
      where org_id = ${opts.orgId}
   `, "objects"));
@@ -1082,7 +1090,7 @@ export async function preflightFullSync(
   );
   const numberOwners = new Map(
     existingRows.map((row) => [
-      documentNumberOwnerKey(row.kind, row.document_number),
+      documentNumberScopeKey(row.kind, row.party_id, row.document_number),
       row.id,
     ]),
   );
@@ -1831,6 +1839,8 @@ export async function runSync(
       string,
       {
         id: string;
+        kind: string;
+        partyId: string | null;
         status: string;
         posted: boolean;
         documentNumber: string;
@@ -1839,18 +1849,21 @@ export async function runSync(
     const allDocumentRows = await db.execute<{
           id: string;
           kind: string;
+          party_id: string | null;
           status: string;
           document_number: string;
           posted: boolean;
           ref: string | null;
         }>(sql`
-        select id, kind, status, document_number,
+        select id, kind, party_id, status, document_number,
                posted_entry_id is not null as posted, custom->>${refKey} as ref
           from documents where org_id = ${org.id}`, "objects");
     for (const r of allDocumentRows) {
       if (r.ref !== null) {
         existing.set(r.ref, {
           id: r.id,
+          kind: r.kind,
+          partyId: r.party_id,
           status: r.status,
           posted: r.posted,
           documentNumber: r.document_number,
@@ -1869,10 +1882,24 @@ export async function runSync(
     }
     const numberOwners = new Map(
       allDocumentRows.map((r) => [
-        documentNumberOwnerKey(r.kind, r.document_number),
+        documentNumberScopeKey(r.kind, r.party_id, r.document_number),
         r.id,
       ]),
     );
+    // Move a document's number claim to the slot its row now occupies.
+    const reassignNumber = (
+      have: { id: string; kind: string; partyId: string | null; documentNumber: string },
+      kind: string,
+      partyId: string | null,
+      documentNumber: string,
+    ) => {
+      const held = documentNumberScopeKey(have.kind, have.partyId, have.documentNumber);
+      if (numberOwners.get(held) === have.id) numberOwners.delete(held);
+      have.kind = kind;
+      have.partyId = partyId;
+      have.documentNumber = documentNumber;
+      numberOwners.set(documentNumberScopeKey(kind, partyId, documentNumber), have.id);
+    };
     const fullStoredKeys =
       since === null ? await loadStoredKeys(org.id, refKey) : null;
 
@@ -2027,6 +2054,8 @@ export async function runSync(
           }
           existing.set(doc.sourceRef, {
             id: docId,
+            kind: doc.kind,
+            partyId: doc.partyId,
             status: doc.posting
               ? "posted"
               : (doc.lifecycleStatus ?? "approved"),
@@ -2034,7 +2063,7 @@ export async function runSync(
             documentNumber: sourceDocumentNumber,
           });
           numberOwners.set(
-            documentNumberOwnerKey(doc.kind, sourceDocumentNumber),
+            documentNumberScopeKey(doc.kind, doc.partyId, sourceDocumentNumber),
             docId,
           );
           continue;
@@ -2047,6 +2076,15 @@ export async function runSync(
           );
         }
         if (doc.posting && !have.posted && have.status !== "voided") {
+          // The rebuild keeps the stored kind and party, so the number
+          // competes in the slot those place it in.
+          const healedNumber = resolveSourceDocumentNumber(
+            { ...doc, kind: have.kind },
+            source.name,
+            have.id,
+            numberOwners,
+            have.partyId,
+          );
           await withOrg(org.id, async () => {
             // Old importer versions could commit the approved document before
             // posting failed. Rebuild its lines/evidence and post as one unit;
@@ -2066,7 +2104,7 @@ export async function runSync(
               await tx.execute(sql`set local openbooks.migration = on`);
               await tx.execute(sql`
                 update documents
-                   set document_number = ${sourceDocumentNumber},
+                   set document_number = ${healedNumber},
                        posting_date = ${doc.postingDate ?? doc.documentDate},
                        posting_period_id = ${doc.postingPeriodId ?? null},
                        status = 'approved',
@@ -2109,20 +2147,7 @@ export async function runSync(
           }
           have.posted = true;
           have.status = "posted";
-          if (
-            numberOwners.get(
-              documentNumberOwnerKey(doc.kind, have.documentNumber),
-            ) === have.id
-          ) {
-            numberOwners.delete(
-              documentNumberOwnerKey(doc.kind, have.documentNumber),
-            );
-          }
-          have.documentNumber = sourceDocumentNumber;
-          numberOwners.set(
-            documentNumberOwnerKey(doc.kind, sourceDocumentNumber),
-            have.id,
-          );
+          reassignNumber(have, have.kind, have.partyId, healedNumber);
           docsNew++;
           continue;
         }
@@ -2209,14 +2234,7 @@ export async function runSync(
               after: auditAfter,
             });
           });
-          numberOwners.delete(
-            documentNumberOwnerKey(doc.kind, have.documentNumber),
-          );
-          have.documentNumber = sourceDocumentNumber;
-          numberOwners.set(
-            documentNumberOwnerKey(doc.kind, sourceDocumentNumber),
-            have.id,
-          );
+          reassignNumber(have, doc.kind, doc.partyId, sourceDocumentNumber);
           docsAmended++;
           continue;
         }
@@ -2319,14 +2337,7 @@ export async function runSync(
           }
         });
         if (have.posted) await refreshDocumentHeaderTotals(have.id, org.id);
-        numberOwners.delete(
-          documentNumberOwnerKey(doc.kind, have.documentNumber),
-        );
-        have.documentNumber = sourceDocumentNumber;
-        numberOwners.set(
-          documentNumberOwnerKey(doc.kind, sourceDocumentNumber),
-          have.id,
-        );
+        reassignNumber(have, doc.kind, doc.partyId, sourceDocumentNumber);
         docsAmended++;
       } catch (e) {
         docsFailed++;

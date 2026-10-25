@@ -1840,11 +1840,12 @@ export function overlappingRemittanceMessage(
  * Which vendor_bill series numbers the remittance bill: the org's EXISTING
  * one, never a parallel series.
  *
- * The bill is a vendor_bill like any other, and documents_org_kind_number
- * makes document numbers unique per (org, kind, number) — so allocating from
- * a private org-level series hardcoded 'BILL-' forks the org's vendor-bill
- * numbering and collides outright once the org's real series emits the same
- * prefix and number. Preference follows the AP path's own rule
+ * The bill is a vendor_bill like any other, and the org's vendor-bill series
+ * issues numbers that are distinct across the organization — so allocating
+ * from a private org-level series hardcoded 'BILL-' forks the org's
+ * vendor-bill numbering and reissues numbers once the org's real series emits
+ * the same prefix and number (a collision outright for the same remittance
+ * vendor, documents_org_kind_party_number). Preference follows the AP path's own rule
  * (web/lib/bills.ts): the billed entity's series when the org scopes its
  * vendor bills per subsidiary, else the org-wide series. Null when neither
  * exists, and the caller seeds 'BILL-' exactly as it always did.

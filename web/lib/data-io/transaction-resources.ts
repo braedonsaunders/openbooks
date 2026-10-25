@@ -19,6 +19,7 @@ import type { DocumentLineInput } from "@openbooks/engine/ledger/document-input"
 import { loadEntryRuleByKey } from '@openbooks/engine/allocations/entry'
 import { controlDeps, loadDocumentEditCurrent } from "@openbooks/engine/ledger/document-service";
 import { nextDocumentNumber } from "../bills.ts";
+import { documentNumberScopeKey, documentNumberScopeSql, isPartyScopedNumberKind } from "@openbooks/engine/records/numbering";
 import { createPermission, postPermission, readPermission, type DocKindConfig } from '../document-kinds'
 import { canonicalDecimal } from '../exact-decimal'
 import {
@@ -362,14 +363,13 @@ async function writeTransactions(
     select id from subsidiaries where org_id = ${ctx.orgId} and parent_id is null limit 1`, 'objects'))[0]?.id ?? null
   const deps = ctx.post ? await controlDeps(ctx.orgId) : null
   // Intra-file natural-key fence: documents are unique per
-  // (org_id, kind, document_number) (documents_org_kind_number), and a
-  // dry-run preview writes nothing — so without this the second of two
-  // identical rows previews clean and then fails at commit. Only a row that
-  // passes every other check reserves its number: a row that fails
-  // validation leaves nothing behind, so it must not poison a valid later
-  // row, and generated (anonymous) numbers never enter the fence. The set is
-  // per write() call, whose org and kind are fixed, so the trimmed number is
-  // the whole key.
+  // (org_id, kind, document_number) — per vendor party for vendor bills and
+  // credits (documentNumberScopeKey) — and a dry-run preview writes nothing,
+  // so without this the second of two identical rows previews clean and then
+  // fails at commit. Only a row that passes every other check reserves its
+  // number: a row that fails validation leaves nothing behind, so it must not
+  // poison a valid later row, and generated (anonymous) numbers never enter
+  // the fence.
   const claimedNumbers = new Set<string>()
 
   for (let i = 0; i < rows.length; i++) {
@@ -545,15 +545,18 @@ async function writeTransactions(
       // at commit, refusing that same row once so preview and commit agree on
       // which row is refused.
       const wantNumber = String(src.documentNumber ?? '').trim()
-      if (wantNumber) {
+      const numberSlot = wantNumber ? documentNumberScopeKey(cfg.kind, partyId, wantNumber) : null
+      if (numberSlot) {
         const dup = await db.execute(sql`
-          select 1 from documents where org_id = ${ctx.orgId} and kind = ${cfg.kind} and document_number = ${wantNumber} limit 1`, 'objects')
+          select 1 from documents where org_id = ${ctx.orgId} and ${documentNumberScopeSql(cfg.kind, partyId, wantNumber)} limit 1`, 'objects')
         if (dup.length > 0) {
           outcome.failed++
-          outcome.errors.push({ row: rowNo, message: `document ${wantNumber} already exists` })
+          outcome.errors.push({ row: rowNo, message: isPartyScopedNumberKind(cfg.kind) && partyId
+            ? `document ${wantNumber} already exists for this vendor`
+            : `document ${wantNumber} already exists` })
           continue
         }
-        if (claimedNumbers.has(wantNumber)) {
+        if (claimedNumbers.has(numberSlot)) {
           // The earlier row in this file holds the number; this copy is the
           // in-file duplicate, not a clash with an existing document.
           outcome.failed++
@@ -563,7 +566,7 @@ async function writeTransactions(
       }
 
       if (ctx.dryRun) {
-        if (wantNumber) claimedNumbers.add(wantNumber)
+        if (numberSlot) claimedNumbers.add(numberSlot)
         outcome.created++
         continue
       }
@@ -677,7 +680,7 @@ async function writeTransactions(
       // the draft persists for review — so a later row claiming it fails here
       // exactly as the storage check would refuse it. An insert that throws
       // never reaches this line and reserves nothing.
-      if (wantNumber) claimedNumbers.add(wantNumber)
+      if (numberSlot) claimedNumbers.add(numberSlot)
 
       if (ctx.post && deps) {
         try {

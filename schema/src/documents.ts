@@ -239,7 +239,17 @@ export const documents = pgTable(
   },
   (t): PgTableExtraConfigValue[] => [
     uniqueIndex("documents_org_id_id_unique").on(t.orgId, t.id),
-    uniqueIndex("documents_org_kind_number").on(t.orgId, t.kind, t.documentNumber),
+    // A vendor bill or vendor credit may carry its vendor's own number, and
+    // vendors number independently, so those kinds are unique per vendor
+    // party. Every other kind, and a vendor document without a party, is
+    // unique per organization and kind (PARTY_SCOPED_NUMBER_KINDS in
+    // engine/src/records/numbering.ts).
+    uniqueIndex("documents_org_kind_number")
+      .on(t.orgId, t.kind, t.documentNumber)
+      .where(sql`${t.kind} not in ('vendor_bill', 'vendor_credit') or ${t.partyId} is null`),
+    uniqueIndex("documents_org_kind_party_number")
+      .on(t.orgId, t.kind, t.partyId, t.documentNumber)
+      .where(sql`${t.kind} in ('vendor_bill', 'vendor_credit') and ${t.partyId} is not null`),
     // Script-journal idempotency: partial, so the NULL key
     // on every non-script row is unconstrained.
     uniqueIndex("documents_org_idempotency_key")

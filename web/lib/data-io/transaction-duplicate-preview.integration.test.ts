@@ -23,6 +23,8 @@ interface Fixture {
   expenseNo: string
 }
 
+const OTHER_VENDOR = 'OTHERV'
+
 /**
  * Lease a fresh scratch org per top-level test. The suite's fixture lifecycle
  * hook drains forgotten leases at every top-level test boundary, so an org
@@ -31,9 +33,12 @@ interface Fixture {
  */
 async function fixture(): Promise<Fixture> {
   const o = await withBypassContext(() => createScratchOrg())
-  await withBypassContext(() =>
-    db.execute(sql`update parties set short_code = 'ACMEV' where id = ${o.vendorId}`),
-  )
+  await withBypassContext(async () => {
+    await db.execute(sql`update parties set short_code = 'ACMEV' where id = ${o.vendorId}`)
+    await db.execute(sql`
+      insert into parties (id, org_id, kind, display_name, short_code, is_active, custom)
+      values (${randomUUID()}, ${o.orgId}, 'vendor', 'Other Vendor', ${OTHER_VENDOR}, true, '{}'::jsonb)`)
+  })
   const expenseNo = (await withOrgContext(o.orgId, () =>
       db.execute<{ number: string }>(sql`select number from accounts where id = ${o.accounts.cogs}`, 'objects'),
     ))[0]?.number
@@ -144,8 +149,8 @@ test(
 )
 
 /**
- * Uniqueness is per (org, kind, document_number) — documents_org_kind_number —
- * so a vendor_bill and a vendor_credit may share one number in the same file.
+ * Uniqueness is per kind, so a vendor_bill and a vendor_credit may share one
+ * number in the same file.
  */
 test(
   'the same number under a different kind is not a duplicate',
@@ -174,6 +179,43 @@ test(
         { created: commitCredit.created, failed: commitCredit.failed },
         { created: 1, failed: 0 },
       )
+    } finally {
+      await dropScratchOrgReporting(fx.orgId)
+    }
+  },
+)
+
+/**
+ * A vendor bill's number is unique per vendor: two vendors may each have
+ * issued "764", in the same file and across files, while the same vendor's
+ * repeat is still refused.
+ */
+test(
+  'two vendors may hold the same bill number; the same vendor may not',
+  { skip: !DB, timeout: 180_000 },
+  async () => {
+    const fx = await fixture()
+    try {
+      const rows = [billRow(fx, 'V-764'), { ...billRow(fx, 'V-764'), party: OTHER_VENDOR }]
+      const preview = await writeBills(fx, 'vendor_bill', rows, true)
+      assert.deepEqual(
+        { created: preview.created, failed: preview.failed },
+        { created: 2, failed: 0 },
+      )
+      const commit = await writeBills(fx, 'vendor_bill', rows, false)
+      assert.deepEqual(
+        { created: commit.created, failed: commit.failed },
+        { created: 2, failed: 0 },
+      )
+      assert.equal(await countDocs(fx, 'vendor_bill', 'V-764'), 2)
+
+      const repeat = await writeBills(fx, 'vendor_bill', [billRow(fx, 'V-764')], false)
+      assert.deepEqual(
+        { created: repeat.created, failed: repeat.failed },
+        { created: 0, failed: 1 },
+      )
+      assert.match(repeat.errors[0]?.message ?? '', /V-764 already exists for this vendor/)
+      assert.equal(await countDocs(fx, 'vendor_bill', 'V-764'), 2)
     } finally {
       await dropScratchOrgReporting(fx.orgId)
     }

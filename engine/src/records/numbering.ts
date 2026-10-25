@@ -8,7 +8,9 @@ import type { SqlExecutor } from "../platform/db.ts";
  * inventory, construction, subcontracts, subscriptions, payments, payroll,
  * CRM — must allocate through here, because `documents` enforces
  * UNIQUE (org_id, kind, document_number) WITHOUT any subsidiary column. A
- * document number is an organization-wide identity, so the sequence
+ * number this allocator issues is an organization-wide identity (only a
+ * counterparty-issued number is narrower; see PARTY_SCOPED_NUMBER_KINDS), so
+ * the sequence
  * configuration must guarantee organization-wide disjoint output: exactly one
  * `number_sequences` row per (org_id, document_kind), always the org-wide row
  * (`subsidiary_id IS NULL`, storage-enforced by
@@ -27,6 +29,64 @@ import type { SqlExecutor } from "../platform/db.ts";
  * ever issued so no edit can reset the counter backward into reproducing an
  * existing document number.
  */
+/**
+ * Kinds whose document number may be the counterparty's own.
+ *
+ * A vendor bill or vendor credit imported from a file or a connected source
+ * keeps the number its vendor printed, and vendors number independently: two
+ * vendors may each issue invoice "764". Storage therefore makes these kinds
+ * unique per (org, kind, vendor party, number) (documents_org_kind_party_number)
+ * while every other kind, and a vendor document with no party, stays unique
+ * per (org, kind, number) (documents_org_kind_number). Numbers this allocator
+ * issues remain distinct organization-wide whatever their kind.
+ */
+export const PARTY_SCOPED_NUMBER_KINDS = ["vendor_bill", "vendor_credit"] as const;
+
+export function isPartyScopedNumberKind(kind: string): boolean {
+  return (PARTY_SCOPED_NUMBER_KINDS as readonly string[]).includes(kind);
+}
+
+/**
+ * The party whose numbers a document's number must be distinct from, or null
+ * when it must be distinct across the organization's documents of its kind
+ * that have no such party.
+ */
+export function documentNumberScopePartyId(
+  kind: string,
+  partyId: string | null | undefined,
+): string | null {
+  return isPartyScopedNumberKind(kind) && partyId ? partyId : null;
+}
+
+/** In-process identity of one storage uniqueness slot for a document number. */
+export function documentNumberScopeKey(
+  kind: string,
+  partyId: string | null | undefined,
+  documentNumber: string,
+): string {
+  return `${kind}\u0000${documentNumberScopePartyId(kind, partyId) ?? ""}\u0000${documentNumber}`;
+}
+
+/**
+ * SQL predicate over `documents` (unqualified columns) matching every
+ * document that holds the same uniqueness slot as `documentNumber` would for
+ * a document of `kind` with `partyId` — exactly the rows the storage indexes
+ * compare it with.
+ */
+export function documentNumberScopeSql(
+  kind: string,
+  partyId: string | null | undefined,
+  documentNumber: string,
+) {
+  const scopeParty = documentNumberScopePartyId(kind, partyId);
+  const party = !isPartyScopedNumberKind(kind)
+    ? sql``
+    : scopeParty
+      ? sql`and party_id = ${scopeParty}::uuid`
+      : sql`and party_id is null`;
+  return sql`kind = ${kind} and document_number = ${documentNumber} ${party}`;
+}
+
 /**
  * Canonical live prefixes per document kind — the exact prefixes the live
  * allocators hand the canonical allocator (sources: web/lib/document-kinds.ts
