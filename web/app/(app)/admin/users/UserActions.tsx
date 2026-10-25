@@ -142,7 +142,7 @@ export function ResendInviteButton({
   isPending: boolean
 }) {
   const t = useTranslations('admin.users')
-  const [link, setLink] = useState<string | null>(null)
+  const [link, setLink] = useState<{ url: string; emailFailed: boolean } | null>(null)
   const router = useRouter()
   const { busy, execute } = useAppAction()
 
@@ -151,7 +151,7 @@ export function ResendInviteButton({
   async function resend() {
     await execute(
       () =>
-        fetchAction<{ setPasswordUrl?: string }>('/api/admin/users', {
+        fetchAction<{ setPasswordUrl?: string; emailFailed?: boolean }>('/api/admin/users', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'resend-invite', userId }),
@@ -162,7 +162,7 @@ export function ResendInviteButton({
         fallbackMessage: t('requestFailed'),
         onOk: (data) => {
           if (typeof data.setPasswordUrl === 'string') {
-            setLink(data.setPasswordUrl)
+            setLink({ url: data.setPasswordUrl, emailFailed: data.emailFailed === true })
             return
           }
           toast.success(t('inviteResent', { email: userEmail }))
@@ -180,7 +180,8 @@ export function ResendInviteButton({
       {link ? (
         <InviteLinkDrawer
           email={userEmail}
-          url={link}
+          url={link.url}
+          emailFailed={link.emailFailed}
           onClose={() => {
             setLink(null)
             router.refresh()

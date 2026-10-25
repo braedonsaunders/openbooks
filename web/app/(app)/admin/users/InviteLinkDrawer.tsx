@@ -8,17 +8,21 @@ import { Button, Drawer, Input, Label } from '@openbooks/ui'
 
 /**
  * One-time set-password link display. Shown when email delivery is not
- * configured and the invite/resend response carried the raw link: the token
+ * configured, or the provider refused the invitation email, and the
+ * invite/resend response carried the raw link: the token
  * exists only here and in the stored SHA-256, so the admin must copy it now
  * — closing loses it. Never rendered when the email path worked.
  */
 export function InviteLinkDrawer({
   email,
   url,
+  emailFailed = false,
   onClose,
 }: {
   email: string
   url: string
+  /** The provider refused the invitation email, as opposed to no email being configured. */
+  emailFailed?: boolean
   onClose: () => void
 }) {
   const t = useTranslations('admin.users')
@@ -47,7 +51,7 @@ export function InviteLinkDrawer({
       onClose={onClose}
       size="md"
       title={t('inviteLinkTitle')}
-      description={t('inviteLinkOneTime')}
+      description={t(emailFailed ? 'inviteLinkEmailFailed' : 'inviteLinkOneTime')}
       headerActions={
         <Button disabled={copied} onClick={copy}>
           {copied ? <Check size={14} /> : <Copy size={14} />}

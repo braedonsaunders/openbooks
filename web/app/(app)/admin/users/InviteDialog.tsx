@@ -47,7 +47,7 @@ function InviteDrawer({
   // No role is preselected: the inviter chooses one deliberately.
   const [roleId, setRoleId] = useState('')
   const [busy, setBusy] = useState(false)
-  const [link, setLink] = useState<string | null>(null)
+  const [link, setLink] = useState<{ url: string; emailFailed: boolean } | null>(null)
 
   // The one-time link replaces the form: it is shown once and never stored,
   // so navigating away before copying loses it.
@@ -55,7 +55,8 @@ function InviteDrawer({
     return (
       <InviteLinkDrawer
         email={email.trim()}
-        url={link}
+        url={link.url}
+        emailFailed={link.emailFailed}
         onClose={() => {
           setLink(null)
           onClose()
@@ -89,7 +90,7 @@ function InviteDrawer({
       }
       const payload = await res.json().catch(() => ({}))
       if (typeof payload.setPasswordUrl === 'string') {
-        setLink(payload.setPasswordUrl)
+        setLink({ url: payload.setPasswordUrl, emailFailed: payload.emailFailed === true })
         return
       }
       toast.success(t('inviteSent', { email: email.trim() }))

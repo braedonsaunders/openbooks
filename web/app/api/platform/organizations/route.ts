@@ -8,6 +8,7 @@ import {
   InviteIssuanceRefusedError,
   issueInviteSetPasswordLink,
   setPasswordUrl,
+  type InviteLinkIssuance,
 } from "../../../../lib/auth-reset";
 import { normalizeCountryCode } from "../../../../lib/countries";
 import { ISO_CURRENCIES } from "../../../../lib/iso-currencies";
@@ -57,7 +58,7 @@ export const POST = defineRoute({
     });
 
     const administrator = created.administrator;
-    let issuance: { raw: string; emailQueued: boolean } | null;
+    let issuance: InviteLinkIssuance | null;
     try {
       issuance = await issueInviteSetPasswordLink({
         user: { id: administrator.userId, org_id: created.orgId, name: administrator.name, email: administrator.email },
@@ -124,7 +125,7 @@ export const POST = defineRoute({
         emailQueued: issuance.emailQueued,
         // One-time operator copy, present only when no mailbox carried it.
         // Never persisted or logged; the stored SHA-256 cannot reproduce it.
-        ...(issuance.emailQueued ? {} : { setPasswordUrl: setPasswordUrl(issuance.raw, { invite: true }) }),
+        ...(issuance.emailQueued ? {} : { setPasswordUrl: setPasswordUrl(issuance.raw, { invite: true }), ...(issuance.emailFailed ? { emailFailed: true } : {}) }),
       },
       { status: 201 },
     );

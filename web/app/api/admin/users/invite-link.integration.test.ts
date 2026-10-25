@@ -20,10 +20,13 @@ const state: {
     allowedSubsidiaryIds: null;
   } | null;
   transport: boolean;
+  /** When set, the provider refuses delivery with this message. */
+  providerRefusal: string | null;
+  failedMarks: string[];
   deliveries: { to: string; subject: string; html: string; text: string }[];
   emailLogs: { recipients: string[]; subject: string; categoryKey: string | null }[];
   sentMarks: string[];
-} = { authz: null, transport: false, deliveries: [], emailLogs: [], sentMarks: [] };
+} = { authz: null, transport: false, providerRefusal: null, failedMarks: [], deliveries: [], emailLogs: [], sentMarks: [] };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
 registerHooks({
@@ -61,6 +64,7 @@ registerHooks({
         export const passwordResetEmail = ({ resetUrl }) => ({ subject: 'Set your password', text: resetUrl, html: resetUrl });
         export const userInvitationEmail = ({ setPasswordUrl }) => ({ subject: 'You are invited', text: setPasswordUrl, html: setPasswordUrl });
         export async function sendVia(transport, message) {
+          if (state.providerRefusal) throw new Error(state.providerRefusal);
           state.deliveries.push({ to: message.to, subject: message.subject, html: message.html, text: message.text });
           return { kind: 'sent', providerMessageId: 'isolated' };
         }
@@ -76,7 +80,7 @@ registerHooks({
         }
         export async function markEmailSent(orgId, logId) { state.sentMarks.push(logId); }
         export async function markEmailUncertain() {}
-        export async function markEmailFailed() {}
+        export async function markEmailFailed(orgId, logId, message) { state.failedMarks.push(message); }
       `);
     }
     return next(specifier, context);
@@ -106,6 +110,8 @@ async function seed(rolePermissions: string[] = []) {
     allowedSubsidiaryIds: null,
   };
   state.transport = false;
+  state.providerRefusal = null;
+  state.failedMarks.length = 0;
   state.deliveries.length = 0;
   state.emailLogs.length = 0;
   state.sentMarks.length = 0;
@@ -183,6 +189,34 @@ test("invite with working email never exposes the link in the response", async (
     assert.equal(payload.emailQueued, true);
     assert.equal("setPasswordUrl" in payload, false);
     assert.equal(state.deliveries.length, 1);
+  } finally {
+    state.authz = null;
+    await dropScratchOrg(f.orgId);
+  }
+});
+
+test("a provider refusal hands the administrator the link instead of reporting the invitation sent", async () => {
+  const f = await seed();
+  try {
+    state.transport = true;
+    state.providerRefusal = "provider refused the sending address";
+    const response = await post({ action: "invite", email: FIRST_EMAIL, roleId: f.roleId });
+    assert.equal(response.status, 200);
+    const payload = (await response.json()) as {
+      userId: string;
+      emailQueued: boolean;
+      emailFailed?: boolean;
+      setPasswordUrl?: string;
+    };
+    assert.equal(payload.emailQueued, false, "a refused email is never reported as sent");
+    assert.equal(payload.emailFailed, true);
+    assert.ok(payload.setPasswordUrl, "the administrator receives the link to hand over");
+    assert.deepEqual(state.failedMarks, ["provider refused the sending address"], "the email log keeps the provider's reason");
+    assert.equal(await liveTokenCount(payload.userId), 1);
+    assert.deepEqual(
+      await completePasswordReset(tokenFromUrl(payload.setPasswordUrl!), "A brand new password 1042"),
+      { ok: true },
+    );
   } finally {
     state.authz = null;
     await dropScratchOrg(f.orgId);

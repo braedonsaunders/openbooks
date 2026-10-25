@@ -1268,6 +1268,7 @@
     "inviteResent": "Invitación reenviada a {email}",
     "inviteLinkTitle": "Enlace de contraseña",
     "inviteLinkOneTime": "El envío de correos no está configurado: copie este enlace y envíelo usted mismo. Se muestra una sola vez y caduca en 7 días.",
+    "inviteLinkEmailFailed": "No se pudo enviar el correo de invitación: el registro de correos guarda el motivo del proveedor. Copie este enlace y envíelo usted mismo. Se muestra una sola vez y caduca en 7 días.",
     "inviteCopyLink": "Copiar enlace",
     "inviteCopied": "Enlace copiado",
     "inviteCopyFailed": "No se pudo copiar el enlace: selecciónelo manualmente",

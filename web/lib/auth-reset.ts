@@ -127,10 +127,16 @@ async function isResetTokenCurrent(userId: string, raw: string): Promise<boolean
 }
 
 /**
- * Deliver a minted token through the org's email transport. Returns true
- * when the message reached a transport (the email_log row records the
- * eventual provider outcome); false when the token was superseded, consumed,
- * or expired before delivery and nothing was sent.
+ * How a credential email left: accepted by the provider, sent with an
+ * unconfirmed outcome, refused by the provider, or never sent because the
+ * token was superseded, consumed or expired first. The email_log row keeps
+ * the provider's own reason.
+ */
+export type CredentialDelivery = "sent" | "uncertain" | "failed" | "superseded";
+
+/**
+ * Deliver a minted token through the org's email transport and report the
+ * delivery outcome.
  *
  * One transaction holds a per-user advisory delivery lock across the
  * currency check and the provider send, so concurrent requests resolve in
@@ -149,11 +155,11 @@ export async function deliverResetEmail(
   transport: EmailTransport,
   raw: string,
   invitation?: CredentialMessage,
-): Promise<boolean> {
+): Promise<CredentialDelivery> {
   // bypass: identity-bootstrap — reset delivery re-reads the recipient's token and home identity; no session exists yet.
   return withBypass(async () => {
     await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${"password-reset-delivery:" + user.id}, 0))`);
-    if (!(await isResetTokenCurrent(user.id, raw))) return false;
+    if (!(await isResetTokenCurrent(user.id, raw))) return "superseded";
     const message = invitation?.message ?? passwordResetEmail({
       recipientName: user.name,
       resetUrl: setPasswordUrl(raw),
@@ -179,17 +185,19 @@ export async function deliverResetEmail(
       }, { deliveryKey: deriveEmailDeliveryKey({ orgId: user.org_id, scope: `direct:${logId}`, to: user.email }) });
       if (outcome.kind === "sent") {
         await markEmailSent(user.org_id, logId, outcome.providerMessageId);
+        return "sent";
       } else {
         // Acceptance state unknown: the reset link may or may not be in the
         // mailbox. Record uncertainty instead of inventing an outcome; the
         // issued token's own expiry bounds any attacker window.
         await markEmailUncertain(user.org_id, logId, outcome.reason);
         console.warn(`[password-reset] delivery outcome unresolved for org ${user.org_id}: ${outcome.reason}`);
+        return "uncertain";
       }
     } catch (error) {
       await markEmailFailed(user.org_id, logId, error instanceof Error ? error.message : String(error));
+      return "failed";
     }
-    return true;
   });
 }
 
@@ -239,7 +247,13 @@ export async function requestPasswordReset(
   await deliverResetEmail(delivery.user, delivery.transport, delivery.raw);
 }
 
-export type InviteLinkIssuance = { raw: string; emailQueued: boolean };
+/**
+ * `emailQueued` is true when the invitation reached the recipient's
+ * provider (accepted or outcome unconfirmed). Otherwise the administrator
+ * receives the raw link to hand over; `emailFailed` says the provider
+ * refused the message, as opposed to no email transport being configured.
+ */
+export type InviteLinkIssuance = { raw: string; emailQueued: boolean; emailFailed?: boolean };
 
 /**
  * Refusal thrown by an `issueInviteSetPasswordLink` authorize hook to stop
@@ -300,7 +314,7 @@ export async function issueInviteSetPasswordLink(input: {
   if (!minted.transport || minted.orgName === null) return { raw: minted.raw, emailQueued: false };
   // A superseded invite link is never emailed: the admin holds the raw
   // token from this same call, and sending a dead link would only confuse.
-  const delivered = await deliverResetEmail(input.user, minted.transport, minted.raw, {
+  const delivery = await deliverResetEmail(input.user, minted.transport, minted.raw, {
     message: userInvitationEmail({
       recipientName: input.user.name,
       orgName: minted.orgName,
@@ -312,7 +326,8 @@ export async function issueInviteSetPasswordLink(input: {
       ? { kind: "user", userId: input.inviter.userId }
       : { kind: "system", reason: "user invitation delivery" },
   });
-  return { raw: minted.raw, emailQueued: delivered };
+  if (delivery === "sent" || delivery === "uncertain") return { raw: minted.raw, emailQueued: true };
+  return { raw: minted.raw, emailQueued: false, ...(delivery === "failed" ? { emailFailed: true } : {}) };
 }
 
 export type ResetOutcome = { ok: true } | { ok: false; reason: "invalid_token" | "weak_password" };

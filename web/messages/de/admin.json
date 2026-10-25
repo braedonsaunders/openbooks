@@ -1268,6 +1268,7 @@
     "inviteResent": "Einladung erneut an {email} gesendet",
     "inviteLinkTitle": "Passwort-Link",
     "inviteLinkOneTime": "Der E-Mail-Versand ist nicht konfiguriert – kopieren Sie diesen Link und senden Sie ihn selbst. Er wird nur einmal angezeigt und läuft in 7 Tagen ab.",
+    "inviteLinkEmailFailed": "Die Einladungs-E-Mail konnte nicht gesendet werden – das E-Mail-Protokoll enthält den Grund des Anbieters. Kopieren Sie diesen Link und senden Sie ihn selbst. Er wird nur einmal angezeigt und läuft in 7 Tagen ab.",
     "inviteCopyLink": "Link kopieren",
     "inviteCopied": "Link kopiert",
     "inviteCopyFailed": "Link konnte nicht kopiert werden – bitte manuell auswählen",

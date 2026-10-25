@@ -395,7 +395,7 @@ const consolidatedRows = [
                 select id, org_id, name, email from users where id=${userId}`, 'objects'))[0]!;
               return deliverResetEmail(user, { provider: "isolated" } as never, staleToken);
             });
-            assert.equal(sent, false);
+            assert.equal(sent, "superseded");
             assert.equal(deliveries.length, 2, "no additional send may follow a superseded delivery");
           } finally {
             delete shared[gateKey];

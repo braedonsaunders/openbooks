@@ -22,7 +22,7 @@ import type { SubsidiaryRestriction } from "@openbooks/schema";
 import { subsidiaryVisibleFilter } from "@openbooks/engine/organization/scope";
 import { guardPermission, subsidiaryScopeAllows, type Authz } from "../../../../lib/authz";
 import { authRequestContext, normalizeLoginEmail } from "../../../../lib/auth-policy";
-import { InviteIssuanceRefusedError, issueInviteSetPasswordLink, setPasswordUrl } from "../../../../lib/auth-reset";
+import { InviteIssuanceRefusedError, issueInviteSetPasswordLink, setPasswordUrl, type InviteLinkIssuance } from "../../../../lib/auth-reset";
 import { deriveInviteDisplayName, UNUSABLE_PASSWORD_HASH } from "./invite";
 import { isUuid } from "../../../../lib/list-params";
 import { countOtherActiveUserAdministrators } from "../../../../lib/sole-administrator";
@@ -897,7 +897,7 @@ export const POST = defineRoute({
         // The authorize hook re-verifies the caller's ceiling against the
         // target's CURRENT stored access inside the mint transaction, so a
         // grant landing after the checks above can never leak a takeover link.
-        let issuance: { raw: string; emailQueued: boolean } | null = null;
+        let issuance: InviteLinkIssuance | null = null;
         try {
           issuance = await issueInviteSetPasswordLink({
             user: { id: created.userId, org_id: actor.orgId, name: created.name, email: created.email },
@@ -941,7 +941,7 @@ export const POST = defineRoute({
           // One-time admin copy: present only when the mailbox could not carry
           // it. Never persisted, never logged — the stored SHA-256 cannot
           // reproduce it.
-          ...(issuance.emailQueued ? {} : { setPasswordUrl: setPasswordUrl(issuance.raw, { invite: true }) }),
+          ...(issuance.emailQueued ? {} : { setPasswordUrl: setPasswordUrl(issuance.raw, { invite: true }), ...(issuance.emailFailed ? { emailFailed: true } : {}) }),
         });
       }
       case "resend-invite": {
@@ -979,7 +979,7 @@ export const POST = defineRoute({
           return { id: found.id, email: found.email, name: found.name };
         }));
         if (target instanceof NextResponse) return target;
-        let issuance: { raw: string; emailQueued: boolean } | null = null;
+        let issuance: InviteLinkIssuance | null = null;
         try {
           issuance = await issueInviteSetPasswordLink({
             user: { id: target.id, org_id: actor.orgId, name: target.name, email: target.email },
@@ -1017,7 +1017,7 @@ export const POST = defineRoute({
           ok: true,
           userId: target.id,
           emailQueued: issuance.emailQueued,
-          ...(issuance.emailQueued ? {} : { setPasswordUrl: setPasswordUrl(issuance.raw, { invite: true }) }),
+          ...(issuance.emailQueued ? {} : { setPasswordUrl: setPasswordUrl(issuance.raw, { invite: true }), ...(issuance.emailFailed ? { emailFailed: true } : {}) }),
         });
       }
       default:

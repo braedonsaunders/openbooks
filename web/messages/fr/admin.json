@@ -1268,6 +1268,7 @@
     "inviteResent": "Invitation renvoyée à {email}",
     "inviteLinkTitle": "Lien de mot de passe",
     "inviteLinkOneTime": "L’envoi de courriels n’est pas configuré : copiez ce lien et envoyez-le vous-même. Il n’est affiché qu’une fois et expire dans 7 jours.",
+    "inviteLinkEmailFailed": "Le courriel d’invitation n’a pas pu être envoyé — le journal des courriels indique le motif du fournisseur. Copiez ce lien et envoyez-le vous-même. Il n’est affiché qu’une fois et expire dans 7 jours.",
     "inviteCopyLink": "Copier le lien",
     "inviteCopied": "Lien copié",
     "inviteCopyFailed": "Copie impossible — sélectionnez le lien manuellement",
