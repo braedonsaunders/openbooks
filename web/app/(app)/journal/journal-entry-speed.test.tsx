@@ -13,7 +13,7 @@ import { stubModules } from "../../../testing/stub-modules";
 
 declare global {
   var __journalToasts: { kind: string; message: string }[] | undefined;
-  var __journalRouter: { pushes: string[]; replaces: string[]; push(url: string): void; replace(url: string): void; refresh(): void } | undefined;
+  var __journalRouter: { push(url: string): void; replace(url: string): void; refresh(): void } | undefined;
 }
 
 await bootJsdomEnvironment({ url: "http://localhost:4800/journal?entryNew=1&mode=edit", matchMediaMatches: false });

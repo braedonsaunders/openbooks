@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { stubModules } from '../testing/stub-modules.ts'
 import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
+import { DEFAULT_ENTRY_PREFERENCES } from '../lib/entry-preferences.ts'
 
 await bootJsdomEnvironment({ url: "http://localhost:4800/dashboard" });
 
@@ -117,6 +118,7 @@ test("platform workspace switcher lives in the account menu, not the header", as
             roles: [{ key: "admin", name: "Admin" }],
             localePreference: null,
             navModePreference: null,
+            entryPreferences: DEFAULT_ENTRY_PREFERENCES,
           }}
           environments={{ ...environments, isSuperAdmin: true }}
           groups={[]}

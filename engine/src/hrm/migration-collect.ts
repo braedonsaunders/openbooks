@@ -217,7 +217,7 @@ function assertUuid(value: string, what: string): void {
   }
 }
 
-async function selectAll<T extends Record<string, any>>(query: ReturnType<typeof sql>): Promise<T[]> {
+async function selectAll<T extends object>(query: ReturnType<typeof sql>): Promise<T[]> {
   return db.execute<T>(query, "objects");
 }
 

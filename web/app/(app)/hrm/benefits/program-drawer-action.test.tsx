@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test, { beforeEach } from 'node:test'
 import { stubModules } from '../../../../testing/stub-modules'
-import { BenefitsError } from '../../../../../engine/src/hrm/benefits/errors.ts'
+import { BenefitsError } from '@openbooks/engine/hrm/benefits/errors'
 
 Object.assign(globalThis, { React: await import('react') })
 
