@@ -188,7 +188,9 @@ function compileFilter(ctx: Ctx, filter: QueryFilter): string {
     case 'contains': {
       if (typeof v !== 'string')
         throw new InsightCompileError('contains_needs_text', '"contains" needs a text value')
-      return `${ref} ilike ${bind(ctx, `%${v}%`)}`
+      // The value is matched literally: LIKE wildcards and the escape
+      // character in it are escaped so "50%" never matches "500".
+      return `${ref} ilike ${bind(ctx, `%${v.replace(/[\\%_]/g, (character) => `\\${character}`)}%`)}`
     }
     case 'in':
     case 'not_in': {

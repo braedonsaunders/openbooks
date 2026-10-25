@@ -118,6 +118,22 @@ test('compileInsightQuery emits valid SQL for not_in filters', () => {
   assert.deepEqual(compiled.params, ['org-1', ['Excluded']])
 })
 
+test('a contains filter matches its value literally, never as LIKE wildcards', () => {
+  const compiled = compileInsightQuery(
+    {
+      source: 'ledger_lines',
+      filters: [{ field: 'party_name', op: 'contains', value: '50%_off\\' }],
+    },
+    'org-1',
+    {},
+    '2026-09-18',
+    null,
+  )
+
+  assert.match(compiled.sql, /p\.display_name ilike \$2/)
+  assert.deepEqual(compiled.params, ['org-1', '%50\\%\\_off\\\\%'])
+})
+
 test('compileInsightQuery keeps an empty not_in filter as a no-op', () => {
   const compiled = compileInsightQuery(
     {
