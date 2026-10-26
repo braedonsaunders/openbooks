@@ -15,7 +15,7 @@ const routeState: RouteState = {
   enqueueCalls: 0,
   runId: "00000000-0000-4000-8000-00000000b001",
 };
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 /** Flatten a drizzle SQL chunk into its raw text for scripted replies. */
 function sqlText(query: unknown): string {
@@ -31,7 +31,7 @@ function sqlText(query: unknown): string {
     })
     .join("");
 }
-;(globalThis as typeof globalThis & Record<string, unknown>).openbooksSqlTextBackupRun = sqlText;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksSqlTextBackupRun = sqlText;
 
 const mockSources = new Map<string, string>([
   [
@@ -62,10 +62,7 @@ const mockSources = new Map<string, string>([
       export const pool = {}
     `,
   ],
-  [
-    "mock:file-storage",
-    "export const s3Enabled = true",
-  ],
+  ["mock:file-storage", "export const s3Enabled = true"],
   [
     "mock:jobs",
     `
@@ -90,6 +87,12 @@ const mockSources = new Map<string, string>([
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
+    if (
+      specifier.endsWith("/platform/db.ts") &&
+      context.parentURL?.includes("/engine/src/backup/")
+    ) {
+      return { url: "mock:db", shortCircuit: true };
+    }
     if (specifier === "@openbooks/engine/platform/db") {
       return { url: "mock:db", shortCircuit: true };
     }
@@ -114,12 +117,16 @@ registerHooks({
 const routeUrl = "./route.ts?backup-enqueue-test";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 function reset(): void {
-  routeState.calls = []; routeState.enqueueCalls = 0; routeState.enqueueError = undefined; routeState.raceStatus = undefined;
+  routeState.calls = [];
+  routeState.enqueueCalls = 0;
+  routeState.enqueueError = undefined;
+  routeState.raceStatus = undefined;
 }
 
 test("an ambiguous enqueue ack returns the id after the worker claims the run", async () => {
   reset();
-  routeState.enqueueError = new Error("Redis response lost"); routeState.raceStatus = "running";
+  routeState.enqueueError = new Error("Redis response lost");
+  routeState.raceStatus = "running";
   const response = await POST();
 
   assert.equal(response.status, 200);
@@ -135,6 +142,16 @@ test("an enqueue failure marks the queued run failed and releases the in-flight 
   assert.equal(response.status, 500);
   assert.deepEqual(await response.json(), { error: "could not queue backup" });
   assert.equal(routeState.enqueueCalls, 1);
-  assert.ok(routeState.calls.some((text) => text.includes("update backup_runs") && text.includes("status = 'queued'")), "the queued run is transitioned to failed");
-  assert.ok(routeState.calls.some((text) => text.includes("insert into audit_log") && text.includes("backup_enqueue_failed")), "the actor-attributed failure event is recorded");
+  assert.ok(
+    routeState.calls.some(
+      (text) => text.includes("update backup_runs") && text.includes("status = 'queued'"),
+    ),
+    "the queued run is transitioned to failed",
+  );
+  assert.ok(
+    routeState.calls.some(
+      (text) => text.includes("insert into audit_log") && text.includes("backup_enqueue_failed"),
+    ),
+    "the actor-attributed failure event is recorded",
+  );
 });

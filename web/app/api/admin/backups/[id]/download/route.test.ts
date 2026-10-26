@@ -30,13 +30,21 @@ const stateKey = Symbol.for("openbooks.stored-backup-download-route-test");
 (globalThis as Record<symbol, unknown>)[stateKey] = state;
 
 const mockSources = new Map<string, string>([
-  ["mock:authz", `export { guardUnrestrictedScope } from ${JSON.stringify(new URL("../../../../../../lib/authz.ts", import.meta.url).href)}; export async function guardPermission() { return { user: { id: '${USER_ID}', orgId: '${ORG_ID}' }, allowedSubsidiaryIds: null } }`],
-  ["mock:db", `
-    export * from ${JSON.stringify(import.meta.resolve('@openbooks/engine/platform/db'))}
+  [
+    "mock:authz",
+    `export { guardUnrestrictedScope } from ${JSON.stringify(new URL("../../../../../../lib/authz.ts", import.meta.url).href)}; export async function guardPermission() { return { user: { id: '${USER_ID}', orgId: '${ORG_ID}' }, allowedSubsidiaryIds: null } }`,
+  ],
+  [
+    "mock:db",
+    `
+    export * from ${JSON.stringify(import.meta.resolve("@openbooks/engine/platform/db"))}
     const state = globalThis[Symbol.for('openbooks.stored-backup-download-route-test')]
     export const db = { execute: async (_query, mode) => { const inMode = (result) => (mode === 'objects' ? result.rows : result); state.queries += 1; return inMode({ rows: state.run ? [state.run] : [] }) } }
-  `],
-  ["mock:backup", `
+  `,
+  ],
+  [
+    "mock:backup",
+    `
     const state = globalThis[Symbol.for('openbooks.stored-backup-download-route-test')]
     export async function auditBackupEvent(event) {
       state.audits.push(event)
@@ -47,7 +55,8 @@ const mockSources = new Map<string, string>([
       state.lastKey = key
       return state.object
     }
-  `],
+  `,
+  ],
 ]);
 
 const listParamsUrl = new URL("../../../../../../lib/list-params.ts", import.meta.url).href;
@@ -61,8 +70,15 @@ const mockUrls = new Map([
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "../../../../../../lib/list-params") return nextResolve(listParamsUrl, context);
+    if (specifier === "../../../../../../lib/list-params")
+      return nextResolve(listParamsUrl, context);
     if (specifier === "../../../../../../lib/export") return nextResolve(exportUrl, context);
+    if (
+      specifier.endsWith("/platform/db.ts") &&
+      context.parentURL?.includes("/engine/src/backup/")
+    ) {
+      return { url: "mock:db", shortCircuit: true };
+    }
     const mocked = mockUrls.get(specifier);
     if (mocked) return { url: mocked, shortCircuit: true };
     return nextResolve(specifier, context);
@@ -75,7 +91,7 @@ registerHooks({
 });
 
 const routeUrl = "./route.ts?stored-backup-download";
-const { GET } = await import(routeUrl) as typeof import("./route.ts");
+const { GET } = (await import(routeUrl)) as typeof import("./route.ts");
 function reset(run = completedRun(), sha256 = archiveSha256) {
   state.run = run;
   state.queries = 0;
@@ -111,7 +127,9 @@ function getRequest(id: string) {
 test("stored download waits for evidence, verifies the archived bytes, and serves their digest", async () => {
   reset();
   let releaseAudit!: () => void;
-  state.auditGate = new Promise<void>((resolve) => { releaseAudit = resolve; });
+  state.auditGate = new Promise<void>((resolve) => {
+    releaseAudit = resolve;
+  });
   const { req, ctx } = getRequest(RUN_ID);
   let settled = false;
   const responsePromise = GET(req, ctx).then((response) => {
@@ -122,7 +140,11 @@ test("stored download waits for evidence, verifies the archived bytes, and serve
     await new Promise<void>((resolve) => setImmediate(resolve));
     assert.equal(state.audits.length, 1, "the disclosure attempt precedes storage access");
     assert.equal(state.storageReads, 0);
-    assert.equal(settled, false, "the archive cannot be disclosed before the audit write completes");
+    assert.equal(
+      settled,
+      false,
+      "the archive cannot be disclosed before the audit write completes",
+    );
   } finally {
     releaseAudit();
   }
@@ -146,5 +168,7 @@ test("stored download refuses object bytes whose recorded size differs", async (
   const response = await GET(req, ctx);
 
   assert.equal(response.status, 502);
-  assert.deepEqual(await response.json(), { error: "backup object failed integrity metadata validation" });
+  assert.deepEqual(await response.json(), {
+    error: "backup object failed integrity metadata validation",
+  });
 });
