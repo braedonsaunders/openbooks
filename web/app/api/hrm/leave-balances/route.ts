@@ -1,12 +1,10 @@
 import { defineRoute } from "@/lib/api/route";
-import { notFound } from "@/lib/api/responses";
 import { NextResponse } from "next/server";
 import { db } from "@openbooks/engine/platform/db";
 import { leaveToday, leaveBalancesForEmployment } from "@openbooks/engine/hrm/leave-read";
 import { subHours } from "@openbooks/engine/hrm/leave-math";
-import { can, guardPermission } from "../../../../lib/authz";
-import { isFeatureEnabled } from "../../../../lib/features";
-import { isUuid } from "../../../../lib/list-params";
+import { guardPermission } from "@/lib/authz";
+import { isUuid } from "@/lib/list-params";
 import { leaveErrorResponse } from "../leave-requests/_lib";
 
 export const runtime = "nodejs";
@@ -22,29 +20,24 @@ const EXACT_HOURS = /^-?\d+(\.\d{1,2})?$/;
  * recorders both read it; the engine re-checks the employment.
  */
 export const GET = defineRoute({
-  public: "session",
-  handler: async ({ request: req, authz: authz }) => {
-    if (!(await isFeatureEnabled(authz.user.orgId, "hrm"))) {
-      return notFound("record");
-    }
-    const gate = can(authz, "hrm.leave.read") ? authz : await guardPermission("hrm.leave.manage");
-    if (gate instanceof NextResponse) return gate;
+  authorize: async () => {
+    const read = await guardPermission("hrm.leave.read");
+    return read instanceof NextResponse && read.status === 403
+      ? await guardPermission("hrm.leave.manage")
+      : read;
+  },
+  feature: "hrm",
+  handler: async ({ request: req, authz: gate }) => {
     const url = new URL(req.url);
     const employmentId = url.searchParams.get("employmentId");
     if (!employmentId || !isUuid(employmentId)) {
-      return NextResponse.json(
-        { error: "employmentId must be a valid id" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "employmentId must be a valid id" }, { status: 400 });
     }
     const asOfParam = url.searchParams.get("asOf");
     const hoursParam = url.searchParams.get("hours");
     const leaveTypeId = url.searchParams.get("leaveTypeId");
     if (leaveTypeId !== null && !isUuid(leaveTypeId)) {
-      return NextResponse.json(
-        { error: "leaveTypeId must be a valid id" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "leaveTypeId must be a valid id" }, { status: 400 });
     }
     if (hoursParam !== null && !EXACT_HOURS.test(hoursParam)) {
       return NextResponse.json(
