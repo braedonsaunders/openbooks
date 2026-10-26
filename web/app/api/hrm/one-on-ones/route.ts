@@ -16,8 +16,7 @@ export const runtime = "nodejs";
 
 async function gated(orgId: string): Promise<boolean> {
   return (
-    (await isFeatureEnabled(orgId, "hrm")) &&
-    (await isFeatureEnabled(orgId, "hrmPerformance"))
+    (await isFeatureEnabled(orgId, "hrm")) && (await isFeatureEnabled(orgId, "hrmPerformance"))
   );
 }
 
@@ -29,23 +28,15 @@ async function gated(orgId: string): Promise<boolean> {
  */
 export const GET = defineRoute({
   public: "session",
+  feature: "hrmPerformance",
   handler: async ({ request: req, authz: authz }) => {
-    if (!(await gated(authz.user.orgId))) {
-      return notFound("record");
-    }
     const params = new URL(req.url).searchParams;
     const employmentId = params.get("employmentId");
     const status = params.get("status");
     if (employmentId !== null && !isUuid(employmentId)) {
-      return NextResponse.json(
-        { error: "employmentId must be a uuid" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "employmentId must be a uuid" }, { status: 400 });
     }
-    if (
-      status !== null &&
-      !["scheduled", "held", "skipped", "cancelled"].includes(status)
-    ) {
+    if (status !== null && !["scheduled", "held", "skipped", "cancelled"].includes(status)) {
       return NextResponse.json(
         { error: "status must be scheduled, held, skipped, or cancelled" },
         { status: 400 },
@@ -53,16 +44,24 @@ export const GET = defineRoute({
     }
     try {
       if (params.get("directory") === "1") {
-        const directory = await listOneOnOneDirectory({ orgId: authz.user.orgId, actorId: authz.user.id, q: params.get("q") ?? "", limit: 25 });
-        return NextResponse.json({ employees: directory.employments.map(employee => ({ value: employee.id, label: employee.name })) });
+        const directory = await listOneOnOneDirectory({
+          orgId: authz.user.orgId,
+          actorId: authz.user.id,
+          q: params.get("q") ?? "",
+          limit: 25,
+        });
+        return NextResponse.json({
+          employees: directory.employments.map((employee) => ({
+            value: employee.id,
+            label: employee.name,
+          })),
+        });
       }
       const ones = await listOneOnOnes({
         orgId: authz.user.orgId,
         actorId: authz.user.id,
         ...(employmentId ? { employmentId } : {}),
-        ...(status
-          ? { status: status as "scheduled" | "held" | "skipped" | "cancelled" }
-          : {}),
+        ...(status ? { status: status as "scheduled" | "held" | "skipped" | "cancelled" } : {}),
       });
       return NextResponse.json({ oneOnOnes: ones });
     } catch (e) {
