@@ -1,0 +1,14 @@
+node_modules
+.next
+output
+playwright-report
+test-results
+sim-runs
+tmp
+corpus
+docs/trust
+schema/migrations
+web/messages
+web/public
+**/*.generated.*
+package-lock.json

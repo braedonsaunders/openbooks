@@ -16,6 +16,7 @@
     "eslint": "9.39.4",
     "eslint-config-next": "16.3.0",
     "next": "16.4.3",
+    "prettier": "3.9.5",
     "typescript": "6.0.3"
   },
   "overrides": {
@@ -111,7 +112,9 @@
     "check:test-bypass-scope": "node scripts/check-test-bypass-scope.mjs",
     "check:ledger-journal-writes": "node scripts/check-ledger-journal-writes.mjs",
     "check:ui-reuse": "node scripts/check-ui-reuse.mjs",
-    "check:engine-public-api": "node scripts/check-engine-public-api.mjs"
+    "check:engine-public-api": "node scripts/check-engine-public-api.mjs",
+    "format": "prettier --write",
+    "format:check": "prettier --check"
   },
   "allowScripts": {
     "@parcel/watcher@2.5.6": true,
