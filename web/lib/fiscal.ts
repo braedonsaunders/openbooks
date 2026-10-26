@@ -1,4 +1,5 @@
 import 'server-only'
+import { cache } from 'react'
 import { sql } from 'drizzle-orm'
 import { addCalendarDays, businessToday } from '@openbooks/engine/platform/business-date/module'
 import { db } from '@openbooks/engine/platform/db'
@@ -28,15 +29,21 @@ export async function orgFiscalContext(
 }
 
 export async function fiscalStartMonth(orgId?: string): Promise<number> {
-  const activeOrgId = await resolveOrgId(orgId)
+  return startMonthOf(await resolveOrgId(orgId))
+}
+
+// Fiscal configuration is read by many loaders of one page (statements,
+// cockpits, analytics). Within a server render each organization's
+// configuration is read once; outside a render these are plain reads.
+const startMonthOf = cache(async (orgId: string): Promise<number> => {
   const r = (await db.execute<{ m: number }>(
     sql`select coalesce((settings->>'fiscalYearStartMonth')::int, 1) as m
           from orgs
-         where id = ${activeOrgId}`, 'objects',
+         where id = ${orgId}`, 'objects',
   ))
   const m = r[0]?.m ?? 1
   return m >= 1 && m <= 12 ? m : 1
-}
+})
 
 /**
  * The default active fiscal calendar's cadence plus its non-adjustment
@@ -49,7 +56,10 @@ export async function fiscalStartMonth(orgId?: string): Promise<number> {
 export async function defaultFiscalCalendarPeriods(
   orgId?: string,
 ): Promise<{ cadence: string; periods: FiscalPeriod[] } | null> {
-  const activeOrgId = await resolveOrgId(orgId)
+  return calendarPeriodsOf(await resolveOrgId(orgId))
+}
+
+const calendarPeriodsOf = cache(async (activeOrgId: string): Promise<{ cadence: string; periods: FiscalPeriod[] } | null> => {
   const cal = (await db.execute<{ cadence: string }>(sql`
     select cadence from fiscal_calendars
      where org_id = ${activeOrgId} and is_default and is_active
@@ -80,7 +90,7 @@ export async function defaultFiscalCalendarPeriods(
       to: p.ends_on,
     })),
   }
-}
+})
 
 async function orgBusinessDay(orgId?: string): Promise<string> {
   return businessToday(await resolveOrgId(orgId))
