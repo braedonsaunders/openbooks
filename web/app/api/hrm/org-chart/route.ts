@@ -1,13 +1,8 @@
 import { defineRoute } from "@/lib/api/route";
-import { notFound } from "@/lib/api/responses";
 import { NextResponse } from "next/server";
-import {
-  loadDirectory,
-  loadOrgChart,
-} from "@openbooks/engine/hrm/org-chart/operations";
+import { loadDirectory, loadOrgChart } from "@openbooks/engine/hrm/org-chart/operations";
 import { businessToday } from "@openbooks/engine/platform/business-date/module";
-import { guardPermission } from "../../../../lib/authz";
-import { isFeatureEnabled } from "../../../../lib/features";
+import { guardPermission } from "@/lib/authz";
 import { hrmDocumentsErrorResponse } from "../documents/_lib";
 import { civilDate } from "../documents/bodies";
 
@@ -17,21 +12,20 @@ import { civilDate } from "../documents/bodies";
  * hrm.employment.read OR hrm.self.read (fenced in the service); the
  * Human resources switch gates the surface.
  */
+async function authorizeOrgChartReader() {
+  const hr = await guardPermission("hrm.employment.read");
+  if (!(hr instanceof NextResponse)) return hr;
+  return guardPermission("hrm.self.read");
+}
+
 export const GET = defineRoute({
-  public: "session",
-  handler: async ({ request: req }) => {
-    const hr = await guardPermission("hrm.employment.read");
-    const actor =
-      hr instanceof NextResponse ? await guardPermission("hrm.self.read") : hr;
-    if (actor instanceof NextResponse) return actor;
-    if (!(await isFeatureEnabled(actor.user.orgId, "hrm"))) {
-      return notFound("record");
-    }
+  authorize: () => authorizeOrgChartReader(),
+  feature: "hrm",
+  handler: async ({ request: req, authz: actor }) => {
     try {
       const params = new URL(req.url).searchParams;
       if (params.get("mode") === "directory") {
-        const requestedPage =
-          params.get("page") == null ? 1 : Number(params.get("page"));
+        const requestedPage = params.get("page") == null ? 1 : Number(params.get("page"));
         if (!Number.isSafeInteger(requestedPage) || requestedPage < 1) {
           return NextResponse.json(
             { error: "page must be a positive whole number" },
@@ -53,13 +47,9 @@ export const GET = defineRoute({
       }
       // The default as-of is the org's business day, never the UTC day (which is
       // tomorrow in the evening for the Americas).
-      const asOf =
-        params.get("asOf") ?? (await businessToday(actor.user.orgId));
+      const asOf = params.get("asOf") ?? (await businessToday(actor.user.orgId));
       if (!civilDate.safeParse(asOf).success) {
-        return NextResponse.json(
-          { error: "asOf must be YYYY-MM-DD" },
-          { status: 400 },
-        );
+        return NextResponse.json({ error: "asOf must be YYYY-MM-DD" }, { status: 400 });
       }
       const chart = await loadOrgChart({
         orgId: actor.user.orgId,
