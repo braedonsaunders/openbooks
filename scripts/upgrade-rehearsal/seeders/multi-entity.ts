@@ -45,6 +45,7 @@ import { sameCurrencyAllocation } from "../payments/settlement-policy.ts";
 import { runRevaluation } from "../close/fx-revaluation.ts";
 import { runCombinedConsolidation } from "../consolidation/consolidation.ts";
 import { closeMonth } from "../sim/ops.ts";
+import { installEngineSeams } from "../composition/install.ts";
 
 function arg(name: string): string {
   const index = process.argv.indexOf(`--${name}`);
@@ -137,6 +138,8 @@ function decimal(rate: number, places: number): string {
 }
 
 async function main(): Promise<void> {
+  // Posting resolves the domain hooks the composition root installs.
+  installEngineSeams();
   const seed = arg("seed");
   const rng = Rng.fromSeed(seed);
   const log = (message: string): void => {
