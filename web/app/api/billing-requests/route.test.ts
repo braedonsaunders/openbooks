@@ -69,9 +69,6 @@ stubModules({
         }
       }
     `,
-    "@/lib/projects-gate": `
-      export async function guardProjectsFeature() { return null }
-    `,
     "@/lib/billing-requests": `
       const state = globalThis[Symbol.for('openbooks.billing-requests-route-test')]
       const visible = (allowed) =>
