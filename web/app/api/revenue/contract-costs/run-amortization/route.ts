@@ -1,15 +1,15 @@
-import { NextResponse } from 'next/server'
-import { z } from 'zod'
-import { runContractCostAmortization } from '@openbooks/engine/revenue'
-import { defineRoute } from '@/lib/api/route'
-import { parseJsonBody, uuidId } from '@/lib/api/json'
-import { contractCostErrorResponse } from '@/lib/contract-costs'
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { runContractCostAmortization } from "@openbooks/engine/revenue";
+import { defineRoute } from "@/lib/api/route";
+import { uuidId } from "@/lib/api/json";
+import { contractCostErrorResponse } from "@/lib/contract-costs";
 
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 const runBody = z.object({
-  periodId: z.string().refine((v) => uuidId.safeParse(v).success, 'invalid period'),
-})
+  periodId: z.string().refine((v) => uuidId.safeParse(v).success, "invalid period"),
+});
 
 /**
  * Run amortization for one period: posts every due, unposted asset line
@@ -17,21 +17,21 @@ const runBody = z.object({
  * skip with a queue note; unlinked commissions queue for linking.
  */
 export const POST = defineRoute({
-  permission: 'contract_costs.manage',
-  feature: 'contractCosts',
-  handler: async ({ request: req, authz: gate }) => {
-    const user = gate.user
-    const parsed = await parseJsonBody(req, runBody, { status: 422 })
-    if (!parsed.ok) return parsed.response
+  permission: "contract_costs.manage",
+  feature: "contractCosts",
+  body: runBody,
+  invalidBodyStatus: 422,
+  handler: async ({ authz: gate, body }) => {
+    const user = gate.user;
     try {
       const result = await runContractCostAmortization({
         orgId: user.orgId,
         actorId: user.id,
-        periodId: parsed.data.periodId,
-      })
-      return NextResponse.json(result)
+        periodId: body.periodId,
+      });
+      return NextResponse.json(result);
     } catch (e: unknown) {
-      return contractCostErrorResponse(e, 'Unable to run contract cost amortization.')
+      return contractCostErrorResponse(e, "Unable to run contract cost amortization.");
     }
   },
-})
+});

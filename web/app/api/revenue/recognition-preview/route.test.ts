@@ -1,28 +1,28 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test from "node:test";
 
-const stateKey = Symbol.for('openbooks.recognition-preview-route-test')
+const stateKey = Symbol.for("openbooks.recognition-preview-route-test");
 const state: {
-  allowedSubsidiaryIds: Set<string> | null
-  previewError: { kind: 'domain' | 'unexpected'; message: string } | null
-  previewRows: unknown[]
+  allowedSubsidiaryIds: Set<string> | null;
+  previewError: { kind: "domain" | "unexpected"; message: string } | null;
+  previewRows: unknown[];
 } = {
   allowedSubsidiaryIds: null,
   previewError: null,
   previewRows: [],
-}
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
 const mockSources = new Map<string, string>([
   // The viewer reads English; without a request store the catalog is unavailable, as outside Next.
   [
-    'next-intl-server',
+    "next-intl-server",
     `export async function getLocale() { return 'en' }
      export async function getTranslations() { throw new Error('no intl request store') }`,
   ],
   [
-    'authz',
+    "authz",
     `
       const state = globalThis[Symbol.for('openbooks.recognition-preview-route-test')]
       export async function guardPermission() {
@@ -42,7 +42,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'features',
+    "features",
     `
       const state = globalThis[Symbol.for('openbooks.recognition-preview-route-test')]
       export async function isFeatureEnabled() { return true }
@@ -55,14 +55,14 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'business-date',
+    "business-date",
     `
       export async function businessToday() { return '2026-08-31' }
       export function isIsoCalendarDate(value) { return /^\\d{4}-\\d{2}-\\d{2}$/.test(value ?? '') }
     `,
   ],
   [
-    'revenue-recognition',
+    "revenue-recognition",
     `
       const state = globalThis[Symbol.for('openbooks.recognition-preview-route-test')]
       export class RevenueRecognitionError extends Error {}
@@ -72,6 +72,7 @@ const mockSources = new Map<string, string>([
       // static import.
       export async function obligationAttribution() { return null }
       export async function revenueContractAttribution() { return null }
+      export async function recognitionScopeRowExists() { return false }
       export async function previewRevenueRecognition(_orgId, _input) {
         if (state.previewError) {
           if (state.previewError.kind === 'domain') throw new RevenueRecognitionError(state.previewError.message)
@@ -93,106 +94,132 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-])
+]);
 
-const selfUrl = new URL(import.meta.url).href
-const mockUrl = (name: string) => `${selfUrl}?preview-mock=${name}`
+const selfUrl = new URL(import.meta.url).href;
+const mockUrl = (name: string) => `${selfUrl}?preview-mock=${name}`;
 const mockUrls = new Map<string, string>([
-  ['../../../../lib/authz', mockUrl('authz')],
-  ['@/lib/authz', mockUrl('authz')],
-  ['../../../../lib/features', mockUrl('features')],
-  ['@/lib/feature-gates', mockUrl('features')],
-  ['@openbooks/engine/platform/business-date/module', mockUrl('business-date')],
-  ['@openbooks/engine/revenue/recognition', mockUrl('revenue-recognition')],
-  ['next-intl/server', mockUrl('next-intl-server')],
+  ["../../../../lib/authz", mockUrl("authz")],
+  ["@/lib/authz", mockUrl("authz")],
+  ["../../../../lib/features", mockUrl("features")],
+  ["@/lib/feature-gates", mockUrl("features")],
+  ["@openbooks/engine/platform/business-date/module", mockUrl("business-date")],
+  ["@openbooks/engine/revenue/recognition", mockUrl("revenue-recognition")],
+  ["next-intl/server", mockUrl("next-intl-server")],
   // The shared error mapper reaches the same engine module through a
   // relative specifier; it must see the same double or instanceof splits.
-  ['../../engine/src/revenue/recognition.ts', mockUrl('revenue-recognition')],
-])
+  ["../../engine/src/revenue/recognition.ts", mockUrl("revenue-recognition")],
+]);
 
 registerHooks({
   resolve(specifier, _context, nextResolve) {
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { shortCircuit: true, url: mocked }
-    return nextResolve(specifier, _context)
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { shortCircuit: true, url: mocked };
+    return nextResolve(specifier, _context);
   },
   load(url, context, nextLoad) {
-    const name = new URL(url).searchParams.get('preview-mock')
-    const source = name ? mockSources.get(name) : undefined
-    if (source !== undefined) return { shortCircuit: true, format: 'module', source }
-    return nextLoad(url, context)
+    const name = new URL(url).searchParams.get("preview-mock");
+    const source = name ? mockSources.get(name) : undefined;
+    if (source !== undefined) return { shortCircuit: true, format: "module", source };
+    return nextLoad(url, context);
   },
-})
+});
 
-const routeUrl = new URL('./route.ts?recognition-preview-test', import.meta.url).href
-const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
+const routeUrl = new URL("./route.ts?recognition-preview-test", import.meta.url).href;
+const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 
 function reset(): void {
-  state.allowedSubsidiaryIds = null
-  state.previewError = null
-  state.previewRows = []
+  state.allowedSubsidiaryIds = null;
+  state.previewError = null;
+  state.previewRows = [];
 }
 
 function post(body: unknown): Promise<Response> {
   return POST(
-    new Request('http://openbooks.test/api/revenue/recognition-preview', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
+    new Request("http://openbooks.test/api/revenue/recognition-preview", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     }),
-  )
+  );
 }
 
-test('a domain refusal from the preview reaches the operator as a named 422, not a 500', async () => {
-  reset()
-  state.previewError = { kind: 'domain', message: 'January 2026: GL period closed' }
+test("a domain refusal from the preview reaches the operator as a named 422, not a 500", async () => {
+  reset();
+  state.previewError = { kind: "domain", message: "January 2026: GL period closed" };
 
-  const response = await post({})
+  const response = await post({});
 
-  assert.equal(response.status, 422)
-  assert.deepEqual(await response.json(), { error: 'January 2026: GL period closed' })
-})
+  assert.equal(response.status, 422);
+  assert.deepEqual(await response.json(), { error: "January 2026: GL period closed" });
+});
 
-test('an unexpected preview defect stays a generic 500', async () => {
-  reset()
-  state.previewError = { kind: 'unexpected', message: 'connection terminated' }
+test("an unexpected preview defect stays a generic 500", async () => {
+  reset();
+  state.previewError = { kind: "unexpected", message: "connection terminated" };
 
-  const response = await post({})
+  const response = await post({});
 
-  assert.equal(response.status, 500)
-  assert.deepEqual(await response.json(), { error: 'Unable to preview revenue recognition.' })
-})
+  assert.equal(response.status, 500);
+  assert.deepEqual(await response.json(), { error: "Unable to preview revenue recognition." });
+});
 
-test('a clean preview passes through with its fingerprint', async () => {
-  reset()
+test("a clean preview passes through with its fingerprint", async () => {
+  reset();
 
-  const response = await post({})
+  const response = await post({});
 
-  assert.equal(response.status, 200)
-  const body = (await response.json()) as { fingerprint: string; totalAmount: string }
-  assert.equal(body.fingerprint, 'preview-fingerprint')
-  assert.equal(body.totalAmount, '0')
-})
+  assert.equal(response.status, 200);
+  const body = (await response.json()) as { fingerprint: string; totalAmount: string };
+  assert.equal(body.fingerprint, "preview-fingerprint");
+  assert.equal(body.totalAmount, "0");
+});
 
-test('preview rows reach the drawer with their period labelled in the viewer locale', async () => {
-  reset()
-  const july = { fiscalYear: 2026, periodNumber: 7, adjustment: false, startsOn: '2026-07-01', endsOn: '2026-07-31' }
+test("preview rows reach the drawer with their period labelled in the viewer locale", async () => {
+  reset();
+  const july = {
+    fiscalYear: 2026,
+    periodNumber: 7,
+    adjustment: false,
+    startsOn: "2026-07-01",
+    endsOn: "2026-07-31",
+  };
   state.previewRows = [
-    { lineId: 'line-open', periodName: 'P07 FY2026', periodRef: july, skipReason: null, skipDetail: null },
-    { lineId: 'line-closed', periodName: 'P07 FY2026', periodRef: july, skipReason: 'period_closed', skipDetail: 'P07 FY2026' },
-    { lineId: 'line-capped', periodName: 'P07 FY2026', periodRef: july, skipReason: 'credit_capped', skipDetail: '1200.0000' },
-  ]
+    {
+      lineId: "line-open",
+      periodName: "P07 FY2026",
+      periodRef: july,
+      skipReason: null,
+      skipDetail: null,
+    },
+    {
+      lineId: "line-closed",
+      periodName: "P07 FY2026",
+      periodRef: july,
+      skipReason: "period_closed",
+      skipDetail: "P07 FY2026",
+    },
+    {
+      lineId: "line-capped",
+      periodName: "P07 FY2026",
+      periodRef: july,
+      skipReason: "credit_capped",
+      skipDetail: "1200.0000",
+    },
+  ];
 
-  const response = await post({})
+  const response = await post({});
 
-  assert.equal(response.status, 200)
-  const body = (await response.json()) as { rows: { lineId: string; periodName: string; skipDetail: string | null }[] }
+  assert.equal(response.status, 200);
+  const body = (await response.json()) as {
+    rows: { lineId: string; periodName: string; skipDetail: string | null }[];
+  };
   assert.deepEqual(
     body.rows.map((row) => [row.lineId, row.periodName, row.skipDetail]),
     [
-      ['line-open', 'P07 FY2026 · Jul 2026', null],
-      ['line-closed', 'P07 FY2026 · Jul 2026', 'P07 FY2026 · Jul 2026'],
-      ['line-capped', 'P07 FY2026 · Jul 2026', '1200.0000'],
+      ["line-open", "P07 FY2026 · Jul 2026", null],
+      ["line-closed", "P07 FY2026 · Jul 2026", "P07 FY2026 · Jul 2026"],
+      ["line-capped", "P07 FY2026 · Jul 2026", "1200.0000"],
     ],
-  )
-})
+  );
+});

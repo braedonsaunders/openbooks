@@ -1,22 +1,21 @@
-import { NextResponse } from 'next/server'
-import { getLocale } from 'next-intl/server'
-import { sql } from 'drizzle-orm'
-import { z } from 'zod'
-import { db } from '@openbooks/engine/platform/db'
+import { NextResponse } from "next/server";
+import { getLocale } from "next-intl/server";
+import { z } from "zod";
+import { db } from "@openbooks/engine/platform/db";
 import {
   obligationAttribution,
   previewRevenueRecognition,
+  recognitionScopeRowExists,
   revenueContractAttribution,
-} from '@openbooks/engine/revenue/recognition'
-import { subsidiaryScopeAllows } from '@openbooks/engine/organization/scope'
-import { periodDisplayLabel } from '@openbooks/engine/periods/period-policy'
-import { businessToday, isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
-import { defineRoute } from '../../../../lib/api/route'
-import { isUuid } from '../../../../lib/list-params'
-import { revenueRecognitionErrorResponse } from '../../../../lib/revenue-recognition-error'
-import { parseJsonBody } from '../../../../lib/api/json'
+} from "@openbooks/engine/revenue/recognition";
+import { subsidiaryScopeAllows } from "@openbooks/engine/organization/scope";
+import { periodDisplayLabel } from "@openbooks/engine/periods/period-policy";
+import { businessToday, isIsoCalendarDate } from "@openbooks/engine/platform/business-date/module";
+import { defineRoute } from "@/lib/api/route";
+import { isUuid } from "@/lib/list-params";
+import { revenueRecognitionErrorResponse } from "@/lib/revenue-recognition-error";
 
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 // Typed preview boundary (never a loose json object: the financial-boundary
 // ceiling only shrinks). Read-only — this endpoint performs SELECTs only. No
@@ -28,10 +27,10 @@ const previewBody = z.object({
   contractId: z.string().optional().nullable(),
   bookId: z.string().optional().nullable(),
   periodId: z.string().optional().nullable(),
-})
+});
 
 function bad(error: string, field?: string, status = 422) {
-  return NextResponse.json({ error, ...(field ? { field } : {}) }, { status })
+  return NextResponse.json({ error, ...(field ? { field } : {}) }, { status });
 }
 
 /**
@@ -47,24 +46,26 @@ async function ownedId(
   orgId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
   raw: string | null | undefined,
-  table: 'accounting_books' | 'accounting_periods' | 'performance_obligations' | 'revenue_contracts',
+  table:
+    "accounting_books" | "accounting_periods" | "performance_obligations" | "revenue_contracts",
 ): Promise<{ ok: true; id: string | null } | { ok: false }> {
-  const id = raw?.trim().toLowerCase() || null
-  if (!id) return { ok: true, id: null }
-  if (!isUuid(id)) return { ok: false }
-  if (table === 'performance_obligations') {
-    const attribution = await obligationAttribution(db, orgId, id)
-    if (!attribution || !subsidiaryScopeAllows(allowedSubsidiaryIds, attribution.subsidiaryId)) return { ok: false }
-    return { ok: true, id }
+  const id = raw?.trim().toLowerCase() || null;
+  if (!id) return { ok: true, id: null };
+  if (!isUuid(id)) return { ok: false };
+  if (table === "performance_obligations") {
+    const attribution = await obligationAttribution(db, orgId, id);
+    if (!attribution || !subsidiaryScopeAllows(allowedSubsidiaryIds, attribution.subsidiaryId))
+      return { ok: false };
+    return { ok: true, id };
   }
-  if (table === 'revenue_contracts') {
-    const attribution = await revenueContractAttribution(db, orgId, id)
-    if (!attribution || !subsidiaryScopeAllows(allowedSubsidiaryIds, attribution.subsidiaryId)) return { ok: false }
-    return { ok: true, id }
+  if (table === "revenue_contracts") {
+    const attribution = await revenueContractAttribution(db, orgId, id);
+    if (!attribution || !subsidiaryScopeAllows(allowedSubsidiaryIds, attribution.subsidiaryId))
+      return { ok: false };
+    return { ok: true, id };
   }
-  const found = await db.execute(sql`
-    select 1 from ${sql.identifier(table)} where id = ${id} and org_id = ${orgId}`, 'objects')
-  return found[0] ? { ok: true, id } : { ok: false }
+  const exists = await recognitionScopeRowExists(db, orgId, table, id);
+  return exists ? { ok: true, id } : { ok: false };
 }
 
 /**
@@ -74,72 +75,94 @@ async function ownedId(
  * fingerprint Confirm carries so the run can refuse a stale review.
  */
 export const POST = defineRoute({
-  permission: 'ar.post',
-  feature: 'revenueRecognition',
-  handler: async ({ request, authz: gate }) => {
-  const user = gate.user
+  permission: "ar.post",
+  feature: "revenueRecognition",
+  body: previewBody,
+  invalidBodyStatus: 422,
+  handler: async ({ authz: gate, body }) => {
+    const user = gate.user;
 
-  const parsed = await parseJsonBody(request, previewBody, { status: 422 })
-  if (!parsed.ok) return parsed.response
-  const body = parsed.data
+    const asOfDate = body.asOfDate?.trim() || (await businessToday(user.orgId));
+    if (!isIsoCalendarDate(asOfDate)) return bad("invalid_as_of_date", "asOfDate");
 
-  const asOfDate = body.asOfDate?.trim() || (await businessToday(user.orgId))
-  if (!isIsoCalendarDate(asOfDate)) return bad('invalid_as_of_date', 'asOfDate')
+    const book = await ownedId(
+      user.orgId,
+      gate.allowedSubsidiaryIds,
+      body.bookId,
+      "accounting_books",
+    );
+    if (!book.ok) return bad("book_not_found", "bookId");
+    const period = await ownedId(
+      user.orgId,
+      gate.allowedSubsidiaryIds,
+      body.periodId,
+      "accounting_periods",
+    );
+    if (!period.ok) return bad("period_not_found", "periodId");
+    const obligation = await ownedId(
+      user.orgId,
+      gate.allowedSubsidiaryIds,
+      body.obligationId,
+      "performance_obligations",
+    );
+    if (!obligation.ok) return bad("obligation_not_found", "obligationId");
+    const contract = await ownedId(
+      user.orgId,
+      gate.allowedSubsidiaryIds,
+      body.contractId,
+      "revenue_contracts",
+    );
+    if (!contract.ok) return bad("contract_not_found", "contractId");
 
-  const book = await ownedId(user.orgId, gate.allowedSubsidiaryIds, body.bookId, 'accounting_books')
-  if (!book.ok) return bad('book_not_found', 'bookId')
-  const period = await ownedId(user.orgId, gate.allowedSubsidiaryIds, body.periodId, 'accounting_periods')
-  if (!period.ok) return bad('period_not_found', 'periodId')
-  const obligation = await ownedId(user.orgId, gate.allowedSubsidiaryIds, body.obligationId, 'performance_obligations')
-  if (!obligation.ok) return bad('obligation_not_found', 'obligationId')
-  const contract = await ownedId(user.orgId, gate.allowedSubsidiaryIds, body.contractId, 'revenue_contracts')
-  if (!contract.ok) return bad('contract_not_found', 'contractId')
+    // A restricted caller with no permitted legal entity previews nothing —
+    // never the unrestricted set. Mirrors the run route exactly.
+    const allowedSubsidiaryIds =
+      gate.allowedSubsidiaryIds === null ? undefined : [...gate.allowedSubsidiaryIds];
+    if (allowedSubsidiaryIds?.length === 0) {
+      return NextResponse.json({
+        asOfDate,
+        obligationId: obligation.id,
+        contractId: contract.id,
+        bookId: book.id,
+        periodId: period.id,
+        rows: [],
+        postableCount: 0,
+        skippedCount: 0,
+        totalAmount: "0",
+        totalDebits: "0",
+        totalCredits: "0",
+        balanced: true,
+        projectSyncPending: false,
+        warnings: [],
+        fingerprint: "",
+      });
+    }
 
-  // A restricted caller with no permitted legal entity previews nothing —
-  // never the unrestricted set. Mirrors the run route exactly.
-  const allowedSubsidiaryIds =
-    gate.allowedSubsidiaryIds === null ? undefined : [...gate.allowedSubsidiaryIds]
-  if (allowedSubsidiaryIds?.length === 0) {
-    return NextResponse.json({
-      asOfDate,
-      obligationId: obligation.id,
-      contractId: contract.id,
-      bookId: book.id,
-      periodId: period.id,
-      rows: [],
-      postableCount: 0,
-      skippedCount: 0,
-      totalAmount: '0',
-      totalDebits: '0',
-      totalCredits: '0',
-      balanced: true,
-      projectSyncPending: false,
-      warnings: [],
-      fingerprint: '',
-    })
-  }
-
-  try {
-    const preview = await previewRevenueRecognition(user.orgId, {
-      asOfDate,
-      obligationId: obligation.id ?? undefined,
-      contractId: contract.id ?? undefined,
-      bookId: book.id ?? undefined,
-      periodId: period.id ?? undefined,
-      allowedSubsidiaryIds,
-    })
-    // Periods reach the drawer labelled in the viewer's locale, including the
-    // closed period a `period_closed` skip names.
-    const locale = await getLocale()
-    return NextResponse.json({
-      ...preview,
-      rows: preview.rows.map((row) => {
-        const periodName = periodDisplayLabel(row.periodRef, locale)
-        return { ...row, periodName, skipDetail: row.skipReason === 'period_closed' ? periodName : row.skipDetail }
-      }),
-    })
-  } catch (e: unknown) {
-    return revenueRecognitionErrorResponse(e, 'Unable to preview revenue recognition.')
-  }
+    try {
+      const preview = await previewRevenueRecognition(user.orgId, {
+        asOfDate,
+        obligationId: obligation.id ?? undefined,
+        contractId: contract.id ?? undefined,
+        bookId: book.id ?? undefined,
+        periodId: period.id ?? undefined,
+        allowedSubsidiaryIds,
+      });
+      // Periods reach the drawer labelled in the viewer's locale, including the
+      // closed period a `period_closed` skip names.
+      const locale = await getLocale();
+      return NextResponse.json({
+        ...preview,
+        rows: preview.rows.map((row) => {
+          const periodName = periodDisplayLabel(row.periodRef, locale);
+          return {
+            ...row,
+            periodName,
+            skipDetail: row.skipReason === "period_closed" ? periodName : row.skipDetail,
+          };
+        }),
+      });
+    } catch (e: unknown) {
+      return revenueRecognitionErrorResponse(e, "Unable to preview revenue recognition.");
+    }
   },
-})
+});

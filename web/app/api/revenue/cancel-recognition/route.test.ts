@@ -1,38 +1,38 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import { randomUUID } from 'node:crypto'
-import test from 'node:test'
-import { withSimClock } from '@openbooks/engine/testing/platform/clock'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import { randomUUID } from "node:crypto";
+import test from "node:test";
+import { withSimClock } from "@openbooks/engine/testing/platform/clock";
 
 type CancelBehavior =
-  | { mode: 'cancelled' }
-  | { mode: 'pending' }
-  | { mode: 'cancelError'; message: string }
-  | { mode: 'voidError'; message: string }
+  | { mode: "cancelled" }
+  | { mode: "pending" }
+  | { mode: "cancelError"; message: string }
+  | { mode: "voidError"; message: string };
 
 interface RouteState {
-  featureEnabled: boolean
-  allowedSubsidiaryIds: Set<string> | null
-  doc: { kind: string; subsidiaryId: string | null } | null
-  kindEnabled: boolean
-  behavior: CancelBehavior
-  calls: { documentId: string; reason: string; reversalDate: string }[]
+  featureEnabled: boolean;
+  allowedSubsidiaryIds: Set<string> | null;
+  doc: { kind: string; subsidiaryId: string | null } | null;
+  kindEnabled: boolean;
+  behavior: CancelBehavior;
+  calls: { documentId: string; reason: string; reversalDate: string }[];
 }
 
-const stateKey = Symbol.for('openbooks.cancel-recognition-route-test')
+const stateKey = Symbol.for("openbooks.cancel-recognition-route-test");
 const state: RouteState = {
   featureEnabled: true,
   allowedSubsidiaryIds: null,
-  doc: { kind: 'customer_invoice', subsidiaryId: 'sub-1' },
+  doc: { kind: "customer_invoice", subsidiaryId: "sub-1" },
   kindEnabled: true,
-  behavior: { mode: 'cancelled' },
+  behavior: { mode: "cancelled" },
   calls: [],
-}
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
 const mockSources = new Map<string, string>([
   [
-    'authz',
+    "authz",
     `
       import { NextResponse } from 'next/server'
       const state = globalThis[Symbol.for('openbooks.cancel-recognition-route-test')]
@@ -59,7 +59,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'features',
+    "features",
     `
       import { NextResponse } from 'next/server'
       const state = globalThis[Symbol.for('openbooks.cancel-recognition-route-test')]
@@ -74,17 +74,18 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'documents',
+    "documents",
     `
       const state = globalThis[Symbol.for('openbooks.cancel-recognition-route-test')]
       export async function isDocKindEnabled() { return state.kindEnabled }
     `,
   ],
   [
-    'revenue-recognition',
+    "revenue-recognition",
     `
       const state = globalThis[Symbol.for('openbooks.cancel-recognition-route-test')]
       export class RevenueRecognitionCancellationError extends Error {}
+      export async function cancellationDocumentScope() { return state.doc }
       export async function cancelRevenueRecognitionForInvoice(input) {
         state.calls.push({ documentId: input.documentId, reason: input.reason, reversalDate: input.reversalDate })
         const behavior = state.behavior
@@ -101,7 +102,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'document-void',
+    "document-void",
     `
       export class DocumentVoidError extends Error {
         constructor(message, status = 500, code) {
@@ -114,7 +115,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'db',
+    "db",
     `
       const state = globalThis[Symbol.for('openbooks.cancel-recognition-route-test')]
       export const db = {
@@ -125,154 +126,168 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-])
+]);
 
-const selfUrl = new URL(import.meta.url).href
-const mockUrl = (name: string) => `${selfUrl}?cancel-mock=${name}`
+const selfUrl = new URL(import.meta.url).href;
+const mockUrl = (name: string) => `${selfUrl}?cancel-mock=${name}`;
 const mockUrls = new Map<string, string>([
-  ['../../../../lib/authz', mockUrl('authz')],
-  ['@/lib/authz', mockUrl('authz')],
-  ['../../../../lib/features', mockUrl('features')],
-  ['@/lib/feature-gates', mockUrl('features')],
-  ['../../../../lib/documents.ts', mockUrl('documents')],
-  ['@openbooks/engine/ledger/revenue-recognition-cancellation', mockUrl('revenue-recognition')],
-  ['@openbooks/engine/ledger/document-void', mockUrl('document-void')],
-  ['@openbooks/engine/platform/db', mockUrl('db')],
-])
+  ["../../../../lib/authz", mockUrl("authz")],
+  ["@/lib/authz", mockUrl("authz")],
+  ["../../../../lib/features", mockUrl("features")],
+  ["@/lib/feature-gates", mockUrl("features")],
+  ["../../../../lib/documents.ts", mockUrl("documents")],
+  ["@openbooks/engine/ledger/revenue-recognition-cancellation", mockUrl("revenue-recognition")],
+  ["@openbooks/engine/ledger/document-void", mockUrl("document-void")],
+  ["@openbooks/engine/platform/db", mockUrl("db")],
+]);
 
 registerHooks({
   resolve(specifier, _context, nextResolve) {
     // The real business-date service owns calendar validation and reads its
     // timezone through the same DB seam as the route.
-    if (specifier === './db.ts' && _context.parentURL?.endsWith('/platform/business-date.ts')) {
-      return { shortCircuit: true, url: mockUrl('db') }
+    if (specifier === "./db.ts" && _context.parentURL?.endsWith("/platform/business-date.ts")) {
+      return { shortCircuit: true, url: mockUrl("db") };
     }
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { shortCircuit: true, url: mocked }
-    return nextResolve(specifier, _context)
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { shortCircuit: true, url: mocked };
+    return nextResolve(specifier, _context);
   },
   load(url, context, nextLoad) {
-    const name = new URL(url).searchParams.get('cancel-mock')
-    const source = name ? mockSources.get(name) : undefined
-    if (source !== undefined) return { shortCircuit: true, format: 'module', source }
-    return nextLoad(url, context)
+    const name = new URL(url).searchParams.get("cancel-mock");
+    const source = name ? mockSources.get(name) : undefined;
+    if (source !== undefined) return { shortCircuit: true, format: "module", source };
+    return nextLoad(url, context);
   },
-})
+});
 
-const routeUrl = new URL('./route.ts?cancel-recognition-test', import.meta.url).href
-const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
+const routeUrl = new URL("./route.ts?cancel-recognition-test", import.meta.url).href;
+const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 
 function reset(): void {
-  state.featureEnabled = true
-  state.allowedSubsidiaryIds = null
-  state.doc = { kind: 'customer_invoice', subsidiaryId: 'sub-1' }
-  state.kindEnabled = true
-  state.behavior = { mode: 'cancelled' }
-  state.calls.length = 0
+  state.featureEnabled = true;
+  state.allowedSubsidiaryIds = null;
+  state.doc = { kind: "customer_invoice", subsidiaryId: "sub-1" };
+  state.kindEnabled = true;
+  state.behavior = { mode: "cancelled" };
+  state.calls.length = 0;
 }
 
 function post(body: unknown): Promise<Response> {
-  return withSimClock('2026-08-31', () => POST(
-    new Request('http://openbooks.test/api/revenue/cancel-recognition', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-    }),
-  ))
+  return withSimClock("2026-08-31", () =>
+    POST(
+      new Request("http://openbooks.test/api/revenue/cancel-recognition", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    ),
+  );
 }
 
-test('cancelling a posted invoice reaches the engine with reason and date', async () => {
-  reset()
-  const documentId = randomUUID()
+test("cancelling a posted invoice reaches the engine with reason and date", async () => {
+  reset();
+  const documentId = randomUUID();
 
-  const response = await post({ documentId, reason: 'customer terminated early', reversalDate: '2026-08-31' })
+  const response = await post({
+    documentId,
+    reason: "customer terminated early",
+    reversalDate: "2026-08-31",
+  });
 
-  assert.equal(response.status, 200)
+  assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), {
     ok: true,
-    status: 'cancelled',
-    recognitionReversalEntryIds: ['rev-1'],
-    invoiceReversalEntryId: 'inv-rev-1',
+    status: "cancelled",
+    recognitionReversalEntryIds: ["rev-1"],
+    invoiceReversalEntryId: "inv-rev-1",
     runId: null,
-  })
-  assert.deepEqual(state.calls, [{ documentId, reason: 'customer terminated early', reversalDate: '2026-08-31' }])
-})
+  });
+  assert.deepEqual(state.calls, [
+    { documentId, reason: "customer terminated early", reversalDate: "2026-08-31" },
+  ]);
+});
 
-test('an omitted reversal date defaults to the business day', async () => {
-  reset()
-  const documentId = randomUUID()
+test("an omitted reversal date defaults to the business day", async () => {
+  reset();
+  const documentId = randomUUID();
 
-  const response = await post({ documentId, reason: 'customer terminated early' })
+  const response = await post({ documentId, reason: "customer terminated early" });
 
-  assert.equal(response.status, 200)
-  assert.equal(state.calls[0]?.reversalDate, '2026-08-31')
-})
+  assert.equal(response.status, 200);
+  assert.equal(state.calls[0]?.reversalDate, "2026-08-31");
+});
 
-test('an approval-gated void surfaces as accepted, not created', async () => {
-  reset()
-  state.behavior = { mode: 'pending' }
+test("an approval-gated void surfaces as accepted, not created", async () => {
+  reset();
+  state.behavior = { mode: "pending" };
 
-  const response = await post({ documentId: randomUUID(), reason: 'customer terminated early' })
+  const response = await post({ documentId: randomUUID(), reason: "customer terminated early" });
 
-  assert.equal(response.status, 202)
-  assert.equal((await response.json()).status, 'pending_approval')
-})
+  assert.equal(response.status, 202);
+  assert.equal((await response.json()).status, "pending_approval");
+});
 
-test('a too-short reason is rejected before reaching the engine', async () => {
-  reset()
+test("a too-short reason is rejected before reaching the engine", async () => {
+  reset();
 
-  const response = await post({ documentId: randomUUID(), reason: 'no' })
+  const response = await post({ documentId: randomUUID(), reason: "no" });
 
-  assert.equal(response.status, 422)
-  assert.deepEqual(state.calls, [])
-})
+  assert.equal(response.status, 422);
+  assert.deepEqual(state.calls, []);
+});
 
-test('an engine cancellation refusal maps to unprocessable', async () => {
-  reset()
-  state.behavior = { mode: 'cancelError', message: 'invoice has no revenue-recognition obligations' }
+test("an engine cancellation refusal maps to unprocessable", async () => {
+  reset();
+  state.behavior = {
+    mode: "cancelError",
+    message: "invoice has no revenue-recognition obligations",
+  };
 
-  const response = await post({ documentId: randomUUID(), reason: 'customer terminated early' })
+  const response = await post({ documentId: randomUUID(), reason: "customer terminated early" });
 
-  assert.equal(response.status, 422)
-  assert.equal((await response.json()).error, 'invoice has no revenue-recognition obligations')
-})
+  assert.equal(response.status, 422);
+  assert.equal((await response.json()).error, "invoice has no revenue-recognition obligations");
+});
 
-test('a downstream void refusal keeps its own status and code', async () => {
-  reset()
-  state.behavior = { mode: 'voidError', message: 'this transaction feeds downstream' }
+test("a downstream void refusal keeps its own status and code", async () => {
+  reset();
+  state.behavior = { mode: "voidError", message: "this transaction feeds downstream" };
 
-  const response = await post({ documentId: randomUUID(), reason: 'customer terminated early' })
+  const response = await post({ documentId: randomUUID(), reason: "customer terminated early" });
 
-  assert.equal(response.status, 409)
-  assert.deepEqual(await response.json(), { error: 'this transaction feeds downstream', code: 'conflict' })
-})
+  assert.equal(response.status, 409);
+  assert.deepEqual(await response.json(), {
+    error: "this transaction feeds downstream",
+    code: "conflict",
+  });
+});
 
-test('an unknown invoice is not found', async () => {
-  reset()
-  state.doc = null
+test("an unknown invoice is not found", async () => {
+  reset();
+  state.doc = null;
 
-  const response = await post({ documentId: randomUUID(), reason: 'customer terminated early' })
+  const response = await post({ documentId: randomUUID(), reason: "customer terminated early" });
 
-  assert.equal(response.status, 404)
-  assert.deepEqual(state.calls, [])
-})
+  assert.equal(response.status, 404);
+  assert.deepEqual(state.calls, []);
+});
 
-test('a subsidiary outside the caller scope never reaches the engine', async () => {
-  reset()
-  state.allowedSubsidiaryIds = new Set(['other-sub'])
+test("a subsidiary outside the caller scope never reaches the engine", async () => {
+  reset();
+  state.allowedSubsidiaryIds = new Set(["other-sub"]);
 
-  const response = await post({ documentId: randomUUID(), reason: 'customer terminated early' })
+  const response = await post({ documentId: randomUUID(), reason: "customer terminated early" });
 
-  assert.equal(response.status, 404)
-  assert.deepEqual(state.calls, [])
-})
+  assert.equal(response.status, 404);
+  assert.deepEqual(state.calls, []);
+});
 
-test('a disabled feature stays hidden', async () => {
-  reset()
-  state.featureEnabled = false
+test("a disabled feature stays hidden", async () => {
+  reset();
+  state.featureEnabled = false;
 
-  const response = await post({ documentId: randomUUID(), reason: 'customer terminated early' })
+  const response = await post({ documentId: randomUUID(), reason: "customer terminated early" });
 
-  assert.equal(response.status, 404)
-  assert.deepEqual(state.calls, [])
-})
+  assert.equal(response.status, 404);
+  assert.deepEqual(state.calls, []);
+});

@@ -1,11 +1,10 @@
-import { apiErrorResponse } from '@/lib/api/error-response'
+import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { proposeRevenueModification } from "@openbooks/engine/revenue/contract-modifications";
 import { isIsoCalendarDate } from "@openbooks/engine/platform/business-date/module";
 import { defineRoute } from "@/lib/api/route";
-import { parseJsonBody } from "@/lib/api/json";
 import { isUuid } from "@/lib/list-params";
 import { canonicalDecimal } from "@/lib/exact-decimal";
 import { moneyRefusal } from "@/lib/payroll-decimal-refusal";
@@ -28,14 +27,17 @@ function monetaryInput(field: string) {
 }
 
 function rateInput(field: string) {
-  return z.string({ error: `${field} must be a decimal string` }).max(40).transform((raw, ctx) => {
-    const exact = canonicalDecimal(raw, 10);
-    if (exact === null) {
-      ctx.addIssue({ code: "custom", message: moneyRefusal(field, raw, "a rate", 10) });
-      return z.NEVER;
-    }
-    return exact;
-  });
+  return z
+    .string({ error: `${field} must be a decimal string` })
+    .max(40)
+    .transform((raw, ctx) => {
+      const exact = canonicalDecimal(raw, 10);
+      if (exact === null) {
+        ctx.addIssue({ code: "custom", message: moneyRefusal(field, raw, "a rate", 10) });
+        return z.NEVER;
+      }
+      return exact;
+    });
 }
 
 export const runtime = "nodejs";
@@ -74,7 +76,7 @@ const revenueModificationSchema = z.object({
                 .array(
                   z.object({
                     periodMonth: date,
-                      amount: monetaryInput("Recognition event amount"),
+                    amount: monetaryInput("Recognition event amount"),
                     description: z.string().max(1000),
                   }),
                 )
@@ -93,25 +95,17 @@ export const POST = defineRoute({
   permission: "ar.post",
   feature: "revenueRecognition",
   params: z.object({ id: z.string() }),
-  handler: async ({ request: req, authz: gate, params }) => {
-  const { id } = params;
-  if (!isUuid(id))
-    return NextResponse.json({ error: "invalid contract" }, { status: 422 });
-  const body = await parseJsonBody(req, revenueModificationSchema, {
-    status: 422,
-  });
-  if (!body.ok) return body.response;
-  try {
-    return NextResponse.json(
-      await proposeRevenueModification(
-        gate.user.orgId,
-        id,
-        gate.user.id,
-        body.data,
-      ),
-    );
-  } catch (e) {
-    return apiErrorResponse(e);
-  }
+  body: revenueModificationSchema,
+  invalidBodyStatus: 422,
+  handler: async ({ authz: gate, params, body: modification }) => {
+    const { id } = params;
+    if (!isUuid(id)) return NextResponse.json({ error: "invalid contract" }, { status: 422 });
+    try {
+      return NextResponse.json(
+        await proposeRevenueModification(gate.user.orgId, id, gate.user.id, modification),
+      );
+    } catch (e) {
+      return apiErrorResponse(e);
+    }
   },
 });
