@@ -79,6 +79,36 @@ stubModules({
         return { id: 'draft-' + subsidiaryId, documentNumber: 'JE-0001' }
       }
     `,
+    "@/lib/journals": `
+      const state = globalThis[Symbol.for('openbooks.journal-draft-route-test')]
+      const legalIds = new Set([
+        '00000000-0000-4000-8000-000000000001',
+        '00000000-0000-4000-8000-000000000002',
+        '00000000-0000-4000-8000-000000000003',
+      ])
+      function refusal(code, message) {
+        const error = new Error(message)
+        error.code = code
+        throw error
+      }
+      export async function createDraftJournal(orgId, userId, options = {}) {
+        state.calls.push({ orgId, userId, options })
+        const scope = options.allowedSubsidiaryIds === undefined ? null : options.allowedSubsidiaryIds
+        let subsidiaryId = options.subsidiaryId ?? null
+        if (subsidiaryId !== null) {
+          if (scope !== null && !scope.has(subsidiaryId)) refusal('subsidiary_not_allowed', 'not found')
+          if (!legalIds.has(subsidiaryId)) refusal('invalid_subsidiary', 'invalid subsidiary')
+        } else if (scope !== null) {
+          const available = [...scope].filter((id) => legalIds.has(id))
+          if (available.length === 0) refusal('no_available_subsidiary', 'no available subsidiary')
+          if (available.length !== 1) refusal('ambiguous_subsidiary_scope', 'ambiguous scope')
+          subsidiaryId = available[0]
+        } else {
+          subsidiaryId = '00000000-0000-4000-8000-000000000001'
+        }
+        return { id: 'draft-' + subsidiaryId, documentNumber: 'JE-0001' }
+      }
+    `,
   },
 });
 
@@ -110,10 +140,7 @@ test("restricted caller with one legal entity defaults to that entity", async ()
   assert.equal(response.status, 200);
   assert.equal((await response.json()).id, `draft-${SINGLE_ID}`);
   assert.equal(state.calls.length, 1);
-  assert.equal(
-    state.calls[0]!.options.allowedSubsidiaryIds?.has(SINGLE_ID),
-    true,
-  );
+  assert.equal(state.calls[0]!.options.allowedSubsidiaryIds?.has(SINGLE_ID), true);
 });
 
 test("restricted caller with an empty scope fails closed without writing", async () => {

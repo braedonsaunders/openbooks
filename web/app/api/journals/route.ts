@@ -2,13 +2,8 @@ import { defineRoute } from "@/lib/api/route";
 import { can } from "@/lib/authz";
 import { NextResponse } from "next/server";
 
-
-import { isUuid } from "../../../lib/list-params";
-import {
-  createManualJournal,
-  journalCreateBody,
-  JournalCreateError,
-} from "../../../lib/journal-create";
+import { isUuid } from "@/lib/list-params";
+import { createManualJournal, journalCreateBody, JournalCreateError } from "@/lib/journal-create";
 
 export const runtime = "nodejs";
 
@@ -20,13 +15,13 @@ export const runtime = "nodejs";
  * insert path for new journals. POST /api/v1/journals is the public twin.
  */
 
-
 export const POST = defineRoute({
   permission: "gl.post",
-  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  feature: {
+    none: "Manual journal creation is a core general-ledger workflow with no organization feature switch.",
+  },
   body: journalCreateBody,
   handler: async ({ request, body, authz: routeAuthz }) => {
-
     const gate = routeAuthz;
 
     const user = gate.user;
@@ -35,9 +30,6 @@ export const POST = defineRoute({
     if (!isUuid(requestId)) {
       return NextResponse.json({ error: "invalid_idempotency_key" }, { status: 400 });
     }
-
-
-
 
     try {
       const result = await createManualJournal({
