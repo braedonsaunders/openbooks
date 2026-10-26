@@ -1,19 +1,19 @@
-import { defineRoute } from '@/lib/api/route'
-import { apiErrorResponse } from '@/lib/api/error-response'
+import { defineRoute } from "@/lib/api/route";
+import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
-import { sql } from "drizzle-orm";
 import { businessToday } from "@openbooks/engine/platform/business-date/module";
-import { db } from "@openbooks/engine/platform/db";
+import {
+  loadCashflowEntityPartyScope,
+  loadCashflowEntityRows,
+} from "@openbooks/engine/reports/cashflow-entity";
 import { add, mulDecimal, normalizeMoney, sum } from "@openbooks/engine/money/money";
-import { guardSubsidiaryScope } from "../../../../../lib/authz";
-import { statementBookExpr } from "../../../../../lib/gl-summary";
-import { flowRates, presentationCurrency } from "../../../../../lib/fx-presentation";
-import { toISO } from "../../../../../lib/cash/core";
-import { openItems } from "../../../../../lib/cash/open-items";
-import { isUuid } from "../../../../../lib/list-params";
-import { subsidiaryVisibleFilter } from "../../../../../lib/subsidiaries";
+import { guardSubsidiaryScope } from "@/lib/authz";
+import { statementBookExpr } from "@/lib/gl-summary";
+import { flowRates, presentationCurrency } from "@/lib/fx-presentation";
+import { toISO } from "@/lib/cash/core";
+import { openItems } from "@/lib/cash/open-items";
+import { isUuid } from "@/lib/list-params";
 import { notFound } from "@/lib/api/responses";
-
 
 export const runtime = "nodejs";
 
@@ -27,7 +27,7 @@ export const runtime = "nodejs";
  */
 export const GET = defineRoute({
   permission: "reports.read",
-  feature: { none: 'No optional feature applies to this permission-governed endpoint.' },
+  feature: { none: "No optional feature applies to this permission-governed endpoint." },
   handler: async ({ request: req, authz: gate }) => {
     const user = gate.user;
     const url = new URL(req.url);
@@ -39,108 +39,42 @@ export const GET = defineRoute({
     // The party is the record boundary.  A null-subsidiary party is an
     // org-wide identity, but every transaction leg below still has to be
     // narrowed to the caller's visible subsidiaries.
-    const partyRow = await db.execute<{ subsidiaryId: string | null }>(sql`
-      select subsidiary_id as "subsidiaryId"
-        from parties
-       where id = ${party} and org_id = ${user.orgId}
-       limit 1
-    `, "objects");
-    if (!partyRow[0]) return notFound("record");
-    const scopeDenied = guardSubsidiaryScope(gate, partyRow[0].subsidiaryId, { orgWideNull: true });
+    const partyRow = await loadCashflowEntityPartyScope(user.orgId, party);
+    if (!partyRow) return notFound("record");
+    const scopeDenied = guardSubsidiaryScope(gate, partyRow.subsidiaryId, { orgWideNull: true });
     if (scopeDenied) return scopeDenied;
 
-    const acctType = side === "ar" ? "asset_receivable" : "liability_payable";
     const today = await businessToday(user.orgId);
-    // Cash settlement source kinds, shared by the payment stats and the recent
-    // list: only documents that move cash count as payments. Customer/vendor
-    // credits and other offsets settle balances without cash and are excluded
-    // from payment counts, days and totals.
-    const settlementKinds = side === "ar" ? sql`'customer_payment', 'deposit'` : sql`'vendor_payment', 'check'`;
-
-    const [pay, partyOpen, recent] = await Promise.all([
-      // Payment legs over the trailing 12 months, grouped per source payment
-      // document (one payment split across two bills is one payment, with days
-      // amount-weighted across its applications). Each group carries its own
-      // functional frame and source date: applications.amount is a ledger
-      // amount in the payment line's functional currency, so groups settle in
-      // different frames for multi-subsidiary parties and must translate
-      // per group — never summed raw. Count, average days and the translated
-      // total are aggregated in JS below over these rows.
-      (db.execute(sql`
-        select pe.source_document_id as pid,
-          sum(ap.amount * (pe.posting_date - be.posting_date))
-            / nullif(sum(ap.amount), 0) as days,
-          sum(ap.amount) as paid,
-          coalesce(psub.base_currency, o.base_currency) as func,
-          pe.posting_date::text as date
-        from applications ap
-        join journal_lines bl on bl.id = ap.to_line_id and bl.org_id = ap.org_id
-        join journal_entries be on be.id = bl.entry_id and be.org_id = ap.org_id
-        join journal_lines pl on pl.id = ap.from_line_id and pl.org_id = ap.org_id
-        join journal_entries pe on pe.id = pl.entry_id and pe.org_id = ap.org_id
-        join accounts ba on ba.id = bl.account_id and ba.org_id = ap.org_id
-        join documents sp on sp.id = pe.source_document_id and sp.org_id = ap.org_id
-        left join subsidiaries psub on psub.id = pl.subsidiary_id and psub.org_id = ap.org_id
-        join orgs o on o.id = ap.org_id
-        where ap.org_id = ${user.orgId} and ba.type = ${acctType} and ap.unapplied_at is null
-          and bl.party_id = ${party}
-          and pe.posting_date >= ${today}::date - interval '12 months' and pe.posting_date <= ${today}
-          and sp.kind in (${settlementKinds})
-          ${subsidiaryVisibleFilter(sql`bl.subsidiary_id`, gate.allowedSubsidiaryIds)}
-          ${subsidiaryVisibleFilter(sql`be.subsidiary_id`, gate.allowedSubsidiaryIds)}
-          ${subsidiaryVisibleFilter(sql`pl.subsidiary_id`, gate.allowedSubsidiaryIds)}
-          ${subsidiaryVisibleFilter(sql`pe.subsidiary_id`, gate.allowedSubsidiaryIds)}
-          ${subsidiaryVisibleFilter(sql`sp.subsidiary_id`, gate.allowedSubsidiaryIds)}
-        group by pe.source_document_id, coalesce(psub.base_currency, o.base_currency), pe.posting_date
-      `, "objects")),
-      // Open items with days-overdue — off the shared cash-engine reader, not
-      // a bespoke aggregate. The old query joined reversed entries
-      // without the document's current posting projection, so an append-only
-      // correction (reversed original + re-post of the same bill) listed the
-      // same bill twice under two dates and inflated the dialog total past the
-      // dashboard. Filtering the house item set to the party keeps the dialog
-      // tied to /ap by construction.
+    const [{ payments: legs, recent }, partyOpen] = await Promise.all([
+      loadCashflowEntityRows({
+        orgId: user.orgId,
+        partyId: party,
+        side,
+        today,
+        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+        statementBook: statementBookExpr(user.orgId),
+      }),
       openItems(
         user.orgId,
         side,
         today,
         gate.allowedSubsidiaryIds === null ? undefined : [...gate.allowedSubsidiaryIds],
       ).then((items) => items.filter((item) => item.partyId === party)),
-      // Recent payments (drawer paginates client-side): the posted source
-      // population only, joined one-to-one to its posting in the current
-      // statement book through the house resolver. Drafts never list, and a
-      // payment posted in two books appears once, not twice.
-      (db.execute(sql`
-        select d.id as doc_id, d.kind as doc_kind, d.document_number, je.id as entry_id,
-          coalesce(d.document_date, d.posting_date)::text as date,
-          round(abs(d.total) * d.fx_rate, 4) as func_amount,
-          coalesce(sub.base_currency, o.base_currency) as func
-        from documents d
-        join journal_entries je on je.source_document_id = d.id and je.org_id = d.org_id
-          and je.status in ('posted', 'reversed') and je.book_id = ${statementBookExpr(user.orgId)}
-        left join subsidiaries sub on sub.id = d.subsidiary_id and sub.org_id = d.org_id
-        join orgs o on o.id = d.org_id
-        where d.org_id = ${user.orgId} and d.party_id = ${party} and d.voided_at is null
-          and d.status = 'posted' -- Live entries only: the recent-payments drawer lists payments posted today
-          and d.kind in (${settlementKinds})
-          ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, gate.allowedSubsidiaryIds)}
-          ${subsidiaryVisibleFilter(sql`je.subsidiary_id`, gate.allowedSubsidiaryIds)}
-        order by coalesce(d.document_date, d.posting_date) desc
-        limit 200
-      `, "objects")),
     ]);
 
     // Payment legs aggregate in JS over the grouped rows: distinct source
     // documents count, days average like SQL avg (nulls ignored), and the paid
     // total translates per group — never summed across functional frames raw.
-    const legs = (pay ?? []) as Array<{ pid: unknown; days: unknown; paid: unknown; func: unknown; date: unknown }>;
     const paymentCount = new Set(legs.map((l) => String(l.pid))).size;
     const dayValues = legs
       .map((l) => l.days)
       .filter((d): d is string | number => d !== null && d !== undefined)
       .map(Number)
       .filter((n) => Number.isFinite(n));
-    const avgDays = dayValues.length > 0 ? Math.round(dayValues.reduce((a, b) => a + b, 0) / dayValues.length) : null;
+    const avgDays =
+      dayValues.length > 0
+        ? Math.round(dayValues.reduce((a, b) => a + b, 0) / dayValues.length)
+        : null;
 
     // Recent amounts AND the paid total translate to presentation at each
     // source date through the one flow context — a USD 100 payment in a CAD
@@ -167,21 +101,46 @@ export const GET = defineRoute({
     let totalPaid: string;
     try {
       recentAmounts = recent.map((r) =>
-        mulDecimal(String(r.func_amount ?? "0"), fx.rateAt(typeof r.func === "string" ? r.func : null, String(r.date ?? today).slice(0, 10))));
-      totalPaid = normalizeMoney(legs.reduce(
-        (total, l) => add(total, mulDecimal(String(l.paid ?? "0"), fx.rateAt(typeof l.func === "string" ? l.func : null, String(l.date ?? today).slice(0, 10)))),
-        "0",
-      ));
+        mulDecimal(
+          String(r.func_amount ?? "0"),
+          fx.rateAt(
+            typeof r.func === "string" ? r.func : null,
+            String(r.date ?? today).slice(0, 10),
+          ),
+        ),
+      );
+      totalPaid = normalizeMoney(
+        legs.reduce(
+          (total, l) =>
+            add(
+              total,
+              mulDecimal(
+                String(l.paid ?? "0"),
+                fx.rateAt(
+                  typeof l.func === "string" ? l.func : null,
+                  String(l.date ?? today).slice(0, 10),
+                ),
+              ),
+            ),
+          "0",
+        ),
+      );
     } catch (error) {
       return apiErrorResponse(error);
     }
-    const currency = fx.base || await presentationCurrency(user.orgId);
+    const currency = fx.base || (await presentationCurrency(user.orgId));
     const rows = partyOpen.map((item) => {
       const due = item.dueDate ? toISO(item.dueDate) : null;
       const overdue = due !== null && due < today;
       return {
-        docId: item.docId, docKind: item.docKind, entryId: item.entryId, docNumber: item.docNumber ?? "",
-        tranDate: toISO(item.tranDate), dueDate: due, remaining: item.remaining, overdue,
+        docId: item.docId,
+        docKind: item.docKind,
+        entryId: item.entryId,
+        docNumber: item.docNumber ?? "",
+        tranDate: toISO(item.tranDate),
+        dueDate: due,
+        remaining: item.remaining,
+        overdue,
       };
     });
     const openBalance = sum(rows.map((item) => item.remaining));
@@ -208,8 +167,14 @@ export const GET = defineRoute({
       reliability,
       currency,
       openItems: rows,
-      recentPayments: ((recent)).map((r, i) => ({ docId: r.doc_id, docKind: r.doc_kind, entryId: r.entry_id, docNumber: r.document_number ?? "", date: r.date, amount: normalizeMoney(recentAmounts[i] ?? "0") })),
+      recentPayments: recent.map((r, i) => ({
+        docId: r.doc_id,
+        docKind: r.doc_kind,
+        entryId: r.entry_id,
+        docNumber: r.document_number ?? "",
+        date: r.date,
+        amount: normalizeMoney(recentAmounts[i] ?? "0"),
+      })),
     });
-
   },
-})
+});

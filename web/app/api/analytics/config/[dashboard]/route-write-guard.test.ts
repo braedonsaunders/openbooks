@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import test from "node:test";
+import { PgDialect } from "drizzle-orm/pg-core";
 
 // Unit regression for the dashboard-config write guard: an UPDATE that
 // matches zero rows (an RLS-hidden org row reports success with no effect)
@@ -15,23 +16,18 @@ interface RouteState {
   allowedSubsidiaryIds: Set<string> | null;
 }
 const state: RouteState = { executed: [], updateRowCount: 1, allowedSubsidiaryIds: null };
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
 /** Flatten drizzle SQL chunks into text for deterministic scripted replies. */
 function sqlText(query: unknown): string {
-  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
-  if (!Array.isArray(chunks)) return "";
-  return chunks
-    .map((chunk) => {
-      if (typeof chunk === "string") return chunk;
-      const value = (chunk as { value?: unknown[] })?.value;
-      if (Array.isArray(value)) return value.map(String).join("");
-      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk);
-      return "";
-    })
-    .join("");
+  try {
+    return new PgDialect().sqlToQuery(query as never).sql;
+  } catch {
+    return "";
+  }
 }
-;(globalThis as typeof globalThis & Record<string, unknown>).openbooksAnalyticsConfigSqlText = sqlText;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksAnalyticsConfigSqlText =
+  sqlText;
 
 const mockSources = new Map<string, string>([
   [
@@ -39,6 +35,14 @@ const mockSources = new Map<string, string>([
     `
       export async function isFeatureEnabled() {
         return true
+      }
+    `,
+  ],
+  [
+    "mock:fx-presentation",
+    `
+      export async function presentationCurrency() {
+        return 'EUR'
       }
     `,
   ],
@@ -69,6 +73,9 @@ const mockSources = new Map<string, string>([
         execute,
         transaction: async (work) => work({ execute }),
       }
+      export async function withOrgTransaction(_orgId, work) {
+        return db.transaction(work)
+      }
     `,
   ],
 ]);
@@ -80,20 +87,31 @@ const mockSources = new Map<string, string>([
 const mockUrls = new Map<string, string>([
   ["../../../../../lib/features", "mock:features"],
   ["../features", "mock:features"],
+  ["../../../../../lib/fx-presentation", "mock:fx-presentation"],
+  ["@/lib/fx-presentation", "mock:fx-presentation"],
 ]);
-let dbRealUrl = ''
+let dbRealUrl = "";
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === "../../../../../lib/authz" || specifier === "@/lib/authz") {
       const real = nextResolve(specifier, context).url;
-      return { shortCircuit: true, format: "module", url: `data:text/javascript,${encodeURIComponent(`export { guardUnrestrictedScope } from ${JSON.stringify(real)}; const state = globalThis[Symbol.for('openbooks.analytics-config-write-guard-test')]; export async function guardPermission() { return { user: { orgId: 'org-1', id: 'user-1', roles: [] }, permissions: new Set(['*']), allowedSubsidiaryIds: state.allowedSubsidiaryIds }; }`)}` };
+      return {
+        shortCircuit: true,
+        format: "module",
+        url: `data:text/javascript,${encodeURIComponent(`export { guardUnrestrictedScope } from ${JSON.stringify(real)}; const state = globalThis[Symbol.for('openbooks.analytics-config-write-guard-test')]; export async function guardPermission() { return { user: { orgId: 'org-1', id: 'user-1', roles: [] }, permissions: new Set(['*']), allowedSubsidiaryIds: state.allowedSubsidiaryIds }; }`)}`,
+      };
     }
     // Presentation currency reads through the analytics reader's public database entry.
-    if (specifier === "@openbooks/engine/platform/db" ||
-      (specifier === "@openbooks/engine/platform/database" && context.parentURL?.endsWith("/analytics/query.ts"))) {
-      dbRealUrl ||= nextResolve("@openbooks/engine/platform/db", context).url
-      return { url: "mock:db", shortCircuit: true }
+    if (
+      specifier === "@openbooks/engine/platform/db" ||
+      (specifier === "@openbooks/engine/platform/database" &&
+        context.parentURL?.endsWith("/analytics/query.ts")) ||
+      (specifier === "../platform/db.ts" &&
+        context.parentURL?.endsWith("/reports/analytics-dashboard-config.ts"))
+    ) {
+      dbRealUrl ||= nextResolve("@openbooks/engine/platform/db", context).url;
+      return { url: "mock:db", shortCircuit: true };
     }
     const mocked = mockUrls.get(specifier);
     if (mocked) return { url: mocked, shortCircuit: true };
@@ -101,7 +119,13 @@ registerHooks({
   },
   load(url, context, nextLoad) {
     const source = mockSources.get(url);
-    if (source !== undefined) return { format: "module", source: url === "mock:db" ? `export * from ${JSON.stringify(dbRealUrl)};\n${source}` : source, shortCircuit: true };
+    if (source !== undefined)
+      return {
+        format: "module",
+        source:
+          url === "mock:db" ? `export * from ${JSON.stringify(dbRealUrl)};\n${source}` : source,
+        shortCircuit: true,
+      };
     return nextLoad(url, context);
   },
 });

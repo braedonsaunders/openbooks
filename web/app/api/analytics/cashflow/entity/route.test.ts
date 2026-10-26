@@ -1,13 +1,20 @@
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import test, { after } from "node:test";
+import { PgDialect } from "drizzle-orm/pg-core";
 
 const stateKey = Symbol.for("openbooks.cashflow-entity-route-test");
 interface RouteState {
   allowedSubsidiaryIds: Set<string> | null;
   partySubsidiaryId: string | null;
   calls: string[];
-  payLegs: Array<{ pid: string; days: string | null; paid: string; func: string | null; date: string }>;
+  payLegs: Array<{
+    pid: string;
+    days: string | null;
+    paid: string;
+    func: string | null;
+    date: string;
+  }>;
   fxRows: Array<{ func: string; as_of: string; rate: string }>;
 }
 
@@ -15,25 +22,22 @@ const routeState: RouteState = {
   allowedSubsidiaryIds: new Set(["sub-allowed"]),
   partySubsidiaryId: null,
   calls: [],
-  payLegs: [{ pid: "pay-1", days: "12.5", paid: "999999999999999.9999", func: null, date: "2026-08-12" }],
+  payLegs: [
+    { pid: "pay-1", days: "12.5", paid: "999999999999999.9999", func: null, date: "2026-08-12" },
+  ],
   fxRows: [],
 };
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 function sqlText(query: unknown): string {
-  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
-  if (!Array.isArray(chunks)) return "";
-  return chunks
-    .map((chunk) => {
-      if (typeof chunk === "string") return chunk;
-      const value = (chunk as { value?: unknown[] })?.value;
-      if (Array.isArray(value)) return value.map(String).join("");
-      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk);
-      return "";
-    })
-    .join("");
+  try {
+    return new PgDialect().sqlToQuery(query as never).sql;
+  } catch {
+    return "";
+  }
 }
-;(globalThis as typeof globalThis & Record<string, unknown>).openbooksCashflowEntitySqlText = sqlText;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksCashflowEntitySqlText =
+  sqlText;
 
 const mockSources = new Map<string, string>([
   [
@@ -82,6 +86,7 @@ const mockSources = new Map<string, string>([
       export const env = {}
       export async function withBypass(work) { return work() }
       export async function withOrgContext(orgId, work) { return work() }
+      export async function withOrgTransaction(orgId, work) { return work() }
     `,
   ],
   [
@@ -112,7 +117,10 @@ const mockSources = new Map<string, string>([
     `export * from "@openbooks/engine/platform/business-date/module"
       export async function businessToday() { return '2026-08-28' }`,
   ],
-  ["mock:features", `export async function subsidiaryFeatureEnabled() { return true }; export async function isFeatureEnabled() { return true }`],
+  [
+    "mock:features",
+    `export async function subsidiaryFeatureEnabled() { return true }; export async function isFeatureEnabled() { return true }`,
+  ],
 ]);
 
 const mockUrls = new Map<string, string>([
@@ -133,9 +141,18 @@ const hooks = registerHooks({
       return nextResolve(specifier, { ...context, parentURL: import.meta.url });
     }
     // The shared analytics reader reads through the engine's public database entry.
-    if ((specifier === './db.ts' && context.parentURL?.endsWith('/platform/accounting-books.ts')) ||
-      (specifier === '@openbooks/engine/platform/database' && context.parentURL?.endsWith('/analytics/query.ts'))) {
-      return { url: 'mock:db', shortCircuit: true };
+    if (
+      (specifier === "./db.ts" && context.parentURL?.endsWith("/platform/accounting-books.ts")) ||
+      (specifier === "@openbooks/engine/platform/database" &&
+        context.parentURL?.endsWith("/analytics/query.ts"))
+    ) {
+      return { url: "mock:db", shortCircuit: true };
+    }
+    if (
+      specifier === "../platform/db.ts" &&
+      context.parentURL?.endsWith("/reports/cashflow-entity.ts")
+    ) {
+      return { url: "mock:db", shortCircuit: true };
     }
     const mocked = mockUrls.get(specifier);
     if (mocked) return { url: mocked, shortCircuit: true };
@@ -156,18 +173,24 @@ function reset(): void {
   routeState.allowedSubsidiaryIds = new Set(["sub-allowed"]);
   routeState.partySubsidiaryId = null;
   routeState.calls.length = 0;
-  routeState.payLegs = [{ pid: "pay-1", days: "12.5", paid: "999999999999999.9999", func: null, date: "2026-08-12" }];
+  routeState.payLegs = [
+    { pid: "pay-1", days: "12.5", paid: "999999999999999.9999", func: null, date: "2026-08-12" },
+  ];
   routeState.fxRows = [];
 }
 
 function request(): Request {
-  return new Request("http://openbooks.test/api/analytics/cashflow/entity?party=00000000-0000-4000-8000-000000000001&side=ar");
+  return new Request(
+    "http://openbooks.test/api/analytics/cashflow/entity?party=00000000-0000-4000-8000-000000000001&side=ar",
+  );
 }
 
 test("entity drills reject a malformed party selector before querying", async () => {
   reset();
 
-  const response = await GET(new Request("http://openbooks.test/api/analytics/cashflow/entity?party=not-a-uuid&side=ar"));
+  const response = await GET(
+    new Request("http://openbooks.test/api/analytics/cashflow/entity?party=not-a-uuid&side=ar"),
+  );
 
   assert.equal(response.status, 404);
   assert.deepEqual(await response.json(), { error: "not_found" });
@@ -182,7 +205,11 @@ test("restricted entity drills gate the party before disclosure", async () => {
 
   assert.equal(response.status, 404);
   assert.deepEqual(await response.json(), { error: "not_found" });
-  assert.equal(routeState.calls.length, 1, "out-of-scope party must stop before transaction queries");
+  assert.equal(
+    routeState.calls.length,
+    1,
+    "out-of-scope party must stop before transaction queries",
+  );
 });
 
 test("entity drills scope every transaction leg and preserve exact money", async () => {
@@ -259,7 +286,10 @@ test("entity totalPaid refuses when a payment leg has no exchange rate", async (
   const response = await GET(request());
   assert.equal(response.status, 422);
   const body = await response.json();
-  assert.equal(body.error, "no spot rate for CAD→USD on or before 2026-08-12 — add it at Setup → Exchange Rates");
+  assert.equal(
+    body.error,
+    "no spot rate for CAD→USD on or before 2026-08-12 — add it at Setup → Exchange Rates",
+  );
 });
 
 // The drill's own live aggregate joined reversed entries without
@@ -282,7 +312,11 @@ test("vendor drills read open items off the shared reader, never reversed entrie
     reader,
     "the drill must project open items through the document's current posting entry",
   );
-  assert.match(reader!, /reverses_entry_id is null/, "reversal entries themselves are never collected");
+  assert.match(
+    reader!,
+    /reverses_entry_id is null/,
+    "reversal entries themselves are never collected",
+  );
   assert.match(reader!, /not exists/, "a reversed original loses to the reversal filter");
   assert.match(reader!, /limit 1/, "the lateral admits exactly one entry per document");
 
