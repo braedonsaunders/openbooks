@@ -9,7 +9,7 @@ import {
   recordTransactionAudit,
   transactionSnapshotsMatch,
 } from "../records/transaction-audit.ts";
-import { promoteCrmAccount } from "../crm/crm.ts";
+import { postingPreconditionHooks } from "../journal/posting-preconditions.ts";
 import { docKindConfig } from "../records/document-kinds.ts";
 import {
   loadCustomFieldAccessDefs,
@@ -523,11 +523,10 @@ async function establishCustomerParty(
       "cash_refund",
     ].includes(current.kind)
   ) {
-    const promotion = await promoteCrmAccount(tx, {
+    const promotion = await postingPreconditionHooks.require("crm").establishCustomerRole(tx, {
       orgId,
       partyId: effectivePartyId,
       actorId: userId,
-      toStage: "customer",
       sourceKind: current.kind,
       sourceId: id,
     });

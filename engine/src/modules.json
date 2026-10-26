@@ -268,6 +268,7 @@
     "crm": {
       "description": "Leads, prospects and pipeline math.",
       "dependsOn": [
+        "journal",
         "money",
         "organization",
         "platform"
@@ -445,7 +446,6 @@
         "allocations",
         "amortization",
         "contractor-withholding",
-        "crm",
         "flows",
         "fx",
         "inventory",

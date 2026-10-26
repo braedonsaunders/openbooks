@@ -1,5 +1,6 @@
 import { registerAssetsPostingContributors } from "../assets/posting-contributors.ts";
 import { registerCompliancePostingContributors } from "../compliance/posting-contributors.ts";
+import { registerCrmPostingContributors } from "../crm/posting-contributors.ts";
 
 /**
  * Install every domain's posting, editing and voiding hooks. The ledger
@@ -13,4 +14,5 @@ import { registerCompliancePostingContributors } from "../compliance/posting-con
 export function installPostingContributors(): void {
   registerAssetsPostingContributors();
   registerCompliancePostingContributors();
+  registerCrmPostingContributors();
 }
