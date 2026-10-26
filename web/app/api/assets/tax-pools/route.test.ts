@@ -4,7 +4,7 @@ import test from "node:test";
 import { NextResponse } from "next/server";
 
 // Route now fails closed (404) on a non-uuid subsidiary id, so scope fixtures use a real uuid.
-const SUB_VISIBLE = '00000000-0000-4000-8000-0000000000e1'
+const SUB_VISIBLE = "00000000-0000-4000-8000-0000000000e1";
 
 interface TaxPoolRouteState {
   allowedSubsidiaryIds: Set<string> | null;
@@ -28,20 +28,16 @@ const routeState: TaxPoolRouteState = {
   allowedSubsidiaryIds: null,
   explicitSubsidiaryExists: true,
   explicitBookExists: true,
-  activePrimaryBookId: 'book-active',
+  activePrimaryBookId: "book-active",
   activePrimaryBookCalls: [],
   filterCalls: [],
   queries: [],
   runCalls: [],
 };
-(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] =
-  routeState;
-(
-  globalThis as typeof globalThis & Record<string, unknown>
-).openbooksTaxPoolsSqlText = sqlText;
-(
-  globalThis as typeof globalThis & Record<string, unknown>
-).openbooksTaxPoolsNextResponse = NextResponse;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksTaxPoolsSqlText = sqlText;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksTaxPoolsNextResponse =
+  NextResponse;
 
 /** Flatten a drizzle SQL chunk into its template text for scripted DB replies. */
 function sqlText(query: unknown): string {
@@ -52,8 +48,7 @@ function sqlText(query: unknown): string {
       if (typeof chunk === "string") return chunk;
       const value = (chunk as { value?: unknown[] })?.value;
       if (Array.isArray(value)) return value.map(String).join("");
-      if ((chunk as { queryChunks?: unknown[] })?.queryChunks)
-        return sqlText(chunk);
+      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk);
       return "";
     })
     .join("");
@@ -163,6 +158,25 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
+  [
+    "mock:tax-pool-route-queries",
+    `
+      const state = globalThis[Symbol.for('openbooks.tax-pools-route-test')]
+      export async function listTaxPoolRouteRows(input) {
+        state.filterCalls.push(input.allowedSubsidiaryIds === null ? null : [...input.allowedSubsidiaryIds])
+        state.queries.push('select ... from tax_pool_periods join tax_depreciation_pools tp where tp.subsidiary_id = any')
+        return [{ tax_year: String(input.taxYear), class_code: '8', regime: 'ca_cca' }]
+      }
+      export async function findActiveTaxPoolBook(_orgId, bookId) {
+        state.queries.push('select ... from accounting_books where id = ' + bookId)
+        return state.explicitBookExists ? { id: bookId } : null
+      }
+      export async function findTaxPoolSubsidiary(_orgId, subsidiaryId) {
+        state.queries.push('select ... from subsidiaries where id = ' + subsidiaryId)
+        return state.explicitSubsidiaryExists ? { id: subsidiaryId } : null
+      }
+    `,
+  ],
 ]);
 
 const selfUrl = new URL(import.meta.url).href;
@@ -175,6 +189,7 @@ const mockUrls = new Map<string, string>([
   ["../../../../lib/subsidiaries", mockUrl("subsidiaries")],
   ["@openbooks/engine/platform/db", mockUrl("db")],
   ["@openbooks/engine/platform/database", mockUrl("accounting-books")],
+  ["@openbooks/engine/assets/tax-pool-route-queries", mockUrl("tax-pool-route-queries")],
   ["@openbooks/engine/tax-returns/pool-run", mockUrl("tax-pool-run")],
 ]);
 
@@ -189,8 +204,7 @@ const _hooks = registerHooks({
     const source = parsed.searchParams.get("tax-pool-mock")
       ? mockSources.get(`mock:${parsed.searchParams.get("tax-pool-mock")}`)
       : mockSources.get(url);
-    if (source !== undefined)
-      return { format: "module", source, shortCircuit: true };
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
     return nextLoad(url, context);
   },
 });
@@ -202,7 +216,7 @@ function reset(allowed: Set<string> | null): void {
   routeState.allowedSubsidiaryIds = allowed;
   routeState.explicitSubsidiaryExists = true;
   routeState.explicitBookExists = true;
-  routeState.activePrimaryBookId = 'book-active';
+  routeState.activePrimaryBookId = "book-active";
   routeState.activePrimaryBookCalls = [];
   routeState.filterCalls = [];
   routeState.queries = [];
@@ -229,9 +243,7 @@ test("GET applies the caller subsidiary scope to tax pool periods", async () => 
   assert.equal(response.status, 200);
   assert.deepEqual(routeState.filterCalls, [[SUB_VISIBLE]]);
   assert.ok(
-    routeState.queries.some(
-      (query) => query.includes("tp.subsidiary_id") && query.includes("any"),
-    ),
+    routeState.queries.some((query) => query.includes("tp.subsidiary_id") && query.includes("any")),
     "the tax-pool list query must constrain the joined pool subsidiary",
   );
 });
@@ -239,15 +251,14 @@ test("GET applies the caller subsidiary scope to tax pool periods", async () => 
 test("POST refuses an explicit subsidiary outside the caller scope before running the pool", async () => {
   reset(new Set([SUB_VISIBLE]));
 
-  const response = await post({ taxYear: 2026, subsidiaryId: "00000000-0000-4000-8000-0000000000e2" });
+  const response = await post({
+    taxYear: 2026,
+    subsidiaryId: "00000000-0000-4000-8000-0000000000e2",
+  });
 
   assert.equal(response.status, 404);
   assert.deepEqual(await response.json(), { error: "not_found" });
-  assert.deepEqual(
-    routeState.runCalls,
-    [],
-    "an out-of-scope tax pool must never reach the engine",
-  );
+  assert.deepEqual(routeState.runCalls, [], "an out-of-scope tax pool must never reach the engine");
 });
 
 test("POST refuses the implicit root when the caller cannot access that subsidiary", async () => {
@@ -310,14 +321,17 @@ test("POST without a subsidiary runs the pool for the root when an older sibling
 
 test("POST defaults to the active GL-posting primary book", async () => {
   reset(null);
-  routeState.activePrimaryBookId = 'book-current';
+  routeState.activePrimaryBookId = "book-current";
 
   const response = await post({ taxYear: 2026, subsidiaryId: SUB_VISIBLE });
 
   assert.equal(response.status, 200);
-  assert.equal(routeState.runCalls[0]?.bookId, 'book-current');
-  assert.deepEqual(routeState.activePrimaryBookCalls, ['org-1']);
-  assert.equal(routeState.queries.some((query) => query.includes('is_primary = true')), false);
+  assert.equal(routeState.runCalls[0]?.bookId, "book-current");
+  assert.deepEqual(routeState.activePrimaryBookCalls, ["org-1"]);
+  assert.equal(
+    routeState.queries.some((query) => query.includes("is_primary = true")),
+    false,
+  );
 });
 
 test("POST refuses to run when no active GL-posting primary book exists", async () => {
@@ -337,5 +351,9 @@ test("POST refuses a custom short tax-year window instead of assuming a full-yea
 
   assert.equal(response.status, 422);
   assert.match(await response.text(), /short tax-year windows are not supported/);
-  assert.deepEqual(routeState.runCalls, [], "no pool result may use an implicit factor of 1 for a short year");
+  assert.deepEqual(
+    routeState.runCalls,
+    [],
+    "no pool result may use an implicit factor of 1 for a short year",
+  );
 });
