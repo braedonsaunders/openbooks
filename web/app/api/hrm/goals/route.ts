@@ -1,9 +1,8 @@
 import { defineRoute } from "@/lib/api/route";
-import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { createGoal } from "@openbooks/engine/hrm/performance/goals";
 import { listGoals } from "@openbooks/engine/hrm/performance/performance-read";
-import { isUuid } from "../../../../lib/list-params";
+import { isUuid } from "@/lib/list-params";
 import { performanceErrorResponse } from "../review-cycles/_lib";
 import { createGoalBody } from "./bodies";
 /**
@@ -18,10 +17,7 @@ export const GET = defineRoute({
   handler: async ({ request: req, authz }) => {
     const employmentId = new URL(req.url).searchParams.get("employmentId");
     if (employmentId !== null && !isUuid(employmentId)) {
-      return NextResponse.json(
-        { error: "employmentId must be a uuid" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "employmentId must be a uuid" }, { status: 400 });
     }
     try {
       const goals = await listGoals({
@@ -38,10 +34,8 @@ export const GET = defineRoute({
 export const POST = defineRoute({
   public: "session",
   feature: "hrm",
-  handler: async ({ request: req, authz }) => {
-    const parsedBody = await parseJsonBody(req, createGoalBody);
-    if (!parsedBody.ok) return parsedBody.response;
-    const body = parsedBody.data;
+  body: createGoalBody,
+  handler: async ({ authz, body }) => {
     try {
       const goal = await createGoal({
         orgId: authz.user.orgId,
