@@ -422,6 +422,23 @@ export interface FilingComputation {
   tracedCash: string;
 }
 
+/** Cash paid plus backup withholding: the amount a payment reports. */
+function reportablePaymentOf(payment: YearPayment): string {
+  if (cmp(payment.backupWithheld ?? "0", "0") < 0)
+    throw new InformationReturnError("Posted backup withholding cannot be negative.");
+  return add(payment.cash, payment.backupWithheld ?? "0");
+}
+
+/** The form's withholding box for a payment that carries backup withholding. */
+function backupWithholdingBox(form: FormDefinition): string {
+  if (form.formType === "T4A")
+    throw new InformationReturnError("US backup withholding cannot be reported on a Canadian T4A.");
+  const withholdingBox = form.boxes.find((box) => box.isWithholding)?.key;
+  if (!withholdingBox)
+    throw new InformationReturnError("The information return defines no federal withholding box.");
+  return withholdingBox;
+}
+
 /**
  * Allocate one payment's cash to boxes.
  *
@@ -436,9 +453,7 @@ export function allocatePaymentToBoxes(args: {
   boxByAccount: ReadonlyMap<string, string>;
   defaultBox: string;
 }): { boxAmounts: Record<string, string>; unmappedAccountIds: string[] } {
-  if (cmp(args.payment.backupWithheld ?? "0", "0") < 0)
-    throw new InformationReturnError("Posted backup withholding cannot be negative.");
-  const reportablePayment = add(args.payment.cash, args.payment.backupWithheld ?? "0");
+  const reportablePayment = reportablePaymentOf(args.payment);
   const buckets: { box: string; weight: string; accountId: string | null }[] = [];
   let appliedTotal = 0n;
   for (const bill of args.payment.bills) {
@@ -505,15 +520,7 @@ export function summarizeRecipient(args: {
       boxAmounts[box] = add(boxAmounts[box] ?? "0", amount);
     }
     if (cmp(payment.backupWithheld ?? "0", "0") > 0) {
-      if (args.form.formType === "T4A")
-        throw new InformationReturnError(
-          "US backup withholding cannot be reported on a Canadian T4A.",
-        );
-      const withholdingBox = args.form.boxes.find((box) => box.isWithholding)?.key;
-      if (!withholdingBox)
-        throw new InformationReturnError(
-          "The information return defines no federal withholding box.",
-        );
+      const withholdingBox = backupWithholdingBox(args.form);
       if (cmp(allocated.boxAmounts[withholdingBox] ?? "0", "0") !== 0) {
         throw new InformationReturnError(
           "Bill account mappings overlap recorded backup withholding. Map bill expense accounts to remuneration boxes before computing the filing.",
@@ -553,6 +560,43 @@ export function summarizeRecipient(args: {
     },
     belowThreshold,
     unmappedAccountIds: [...unmapped],
+  };
+}
+
+/**
+ * Totals for a vendor that is neither reportable nor on this filing, whose
+ * spend therefore reaches no box. Only the reportable total is read for such
+ * a vendor (it names an unflagged vendor paid over the threshold), and when
+ * no box rule or default box is a withholding box that total is the cash
+ * paid plus backup withholding, exactly as allocation would sum it, without
+ * tracing the payments to bill lines.
+ */
+function summarizeOutsideFiling(args: {
+  form: FormDefinition;
+  payments: readonly YearPayment[];
+  filingThreshold: string;
+}): { amounts: RecipientAmounts; belowThreshold: boolean; unmappedAccountIds: string[] } {
+  let reportableTotal = "0";
+  let withheld = "0";
+  let traced = "0";
+  for (const payment of args.payments) {
+    reportableTotal = add(reportableTotal, reportablePaymentOf(payment));
+    if (cmp(payment.backupWithheld ?? "0", "0") > 0) {
+      backupWithholdingBox(args.form);
+      withheld = add(withheld, payment.backupWithheld!);
+    }
+    traced = add(traced, payment.cash);
+  }
+  return {
+    amounts: {
+      boxAmounts: {},
+      reportableTotal,
+      withheld,
+      paymentCount: args.payments.length,
+      tracedCash: traced,
+    },
+    belowThreshold: cmp(reportableTotal, args.filingThreshold) < 0,
+    unmappedAccountIds: [],
   };
 }
 
@@ -670,6 +714,26 @@ export async function loadPaymentTraces(args: {
   subsidiaryId?: string | null;
   runner?: Pick<typeof db, "execute">;
 }): Promise<Map<string, PaymentTrace[]>> {
+  const payments = await loadYearPayments(args);
+  const bills = await loadSettledBills(args.orgId, [...payments.values()].flat(), args.runner);
+  return new Map(
+    [...payments].map(([partyId, list]) => [
+      partyId,
+      list.map((payment) => ({ ...payment, bills: bills.get(payment.paymentId) ?? [] })),
+    ]),
+  );
+}
+
+/** A posted vendor payment before it is traced to the bills it settled. */
+export type YearPayment = Omit<PaymentTrace, "bills">;
+
+/** Every posted vendor payment in the calendar year, per payee. */
+async function loadYearPayments(args: {
+  orgId: string;
+  taxYear: number;
+  subsidiaryId?: string | null;
+  runner?: Pick<typeof db, "execute">;
+}): Promise<Map<string, YearPayment[]>> {
   const runner = args.runner ?? db;
   const from = `${args.taxYear}-01-01`;
   const to = `${args.taxYear}-12-31`;
@@ -751,11 +815,44 @@ export async function loadPaymentTraces(args: {
   `,
     "objects",
   );
-  if (payments.length === 0) return new Map();
+  const byParty = new Map<string, YearPayment[]>();
+  for (const p of payments) {
+    if (cmp(p.backup_liability_transaction ?? "0", p.backup_deduction_transaction ?? "0") !== 0) {
+      throw new InformationReturnError(
+        `Payment ${p.document_number} backup deductions do not match the posted withholding liability.`,
+      );
+    }
+    if ((p.withholding_deduction_ids?.length ?? 0) > 0 && cmp(p.backup_withheld ?? "0", "0") <= 0) {
+      throw new InformationReturnError(
+        `Payment ${p.document_number} has posted backup deductions without their posted liability credit.`,
+      );
+    }
+    const list = byParty.get(p.party_id) ?? [];
+    list.push({
+      paymentId: p.id,
+      journalEntryId: p.journal_entry_id,
+      journalLineIds: p.journal_line_ids,
+      documentNumber: p.document_number,
+      paymentDate: p.document_date,
+      cash: p.cash,
+      backupWithheld: p.backup_withheld ?? "0",
+      withholdingDeductionIds: p.withholding_deduction_ids ?? [],
+    });
+    byParty.set(p.party_id, list);
+  }
+  return byParty;
+}
 
-  const paymentIds = payments.map((p) => p.id);
+/** The bills, and bill lines, each payment settled; keyed by payment id. */
+async function loadSettledBills(
+  orgId: string,
+  payments: readonly YearPayment[],
+  runner: Pick<typeof db, "execute"> = db,
+): Promise<Map<string, SettledBill[]>> {
+  if (payments.length === 0) return new Map();
+  const paymentIds = payments.map((p) => p.paymentId);
   // What each payment settled, and each settled bill's expense composition.
-  // `applications.amount` is base currency, matching the cash figure above.
+  // `applications.amount` is base currency, matching the payment cash.
   const settled = await runner.execute<{
     payment_id: string;
     bill_id: string;
@@ -772,7 +869,7 @@ export async function loadPaymentTraces(args: {
         -- Live entries only: settlements are read from the same live payments as the cash above.
         join journal_entries je on je.id = d.posted_entry_id and je.org_id = d.org_id and je.status = 'posted'
         join journal_lines jl on jl.entry_id = je.id and jl.org_id = je.org_id and jl.is_open_item
-       where d.org_id = ${args.orgId} and d.id = any(${`{${paymentIds.join(",")}}`}::uuid[])
+       where d.org_id = ${orgId} and d.id = any(${`{${paymentIds.join(",")}}`}::uuid[])
     )
     select paid.payment_id, bill.id as bill_id, bje.id as bill_entry_id,
            array_agg(a.id order by a.id)::text[] as application_ids,
@@ -780,11 +877,11 @@ export async function loadPaymentTraces(args: {
            array_agg(distinct target.id order by target.id)::text[] as bill_open_item_line_ids,
            sum(a.amount) as applied
       from paid
-      join applications a on a.from_line_id = paid.line_id and a.org_id = ${args.orgId} and a.unapplied_at is null
+      join applications a on a.from_line_id = paid.line_id and a.org_id = ${orgId} and a.unapplied_at is null
       join journal_lines target on target.id = a.to_line_id and target.org_id = a.org_id
       join journal_entries bje on bje.id = target.entry_id and bje.org_id = target.org_id
       join documents bill on bill.id = bje.source_document_id and bill.org_id = bje.org_id
-     where a.org_id = ${args.orgId}
+     where a.org_id = ${orgId}
      group by paid.payment_id, bill.id, bje.id
   `,
     "objects",
@@ -803,7 +900,7 @@ export async function loadPaymentTraces(args: {
                -- Tax rides along proportionally: a 1099 reports the gross paid.
                (dl.amount + coalesce(dl.tax_amount, 0)) as weight
           from document_lines dl
-         where dl.org_id = ${args.orgId} and dl.document_id = any(${`{${billIds.join(",")}}`}::uuid[])
+         where dl.org_id = ${orgId} and dl.document_id = any(${`{${billIds.join(",")}}`}::uuid[])
          order by dl.document_id, dl.line_number
       `,
         "objects",
@@ -831,33 +928,7 @@ export async function loadPaymentTraces(args: {
     billsByPayment.set(row.payment_id, list);
   }
 
-  const byParty = new Map<string, PaymentTrace[]>();
-  for (const p of payments) {
-    if (cmp(p.backup_liability_transaction ?? "0", p.backup_deduction_transaction ?? "0") !== 0) {
-      throw new InformationReturnError(
-        `Payment ${p.document_number} backup deductions do not match the posted withholding liability.`,
-      );
-    }
-    if ((p.withholding_deduction_ids?.length ?? 0) > 0 && cmp(p.backup_withheld ?? "0", "0") <= 0) {
-      throw new InformationReturnError(
-        `Payment ${p.document_number} has posted backup deductions without their posted liability credit.`,
-      );
-    }
-    const list = byParty.get(p.party_id) ?? [];
-    list.push({
-      paymentId: p.id,
-      journalEntryId: p.journal_entry_id,
-      journalLineIds: p.journal_line_ids,
-      documentNumber: p.document_number,
-      paymentDate: p.document_date,
-      cash: p.cash,
-      backupWithheld: p.backup_withheld ?? "0",
-      withholdingDeductionIds: p.withholding_deduction_ids ?? [],
-      bills: billsByPayment.get(p.id) ?? [],
-    });
-    byParty.set(p.party_id, list);
-  }
-  return byParty;
+  return billsByPayment;
 }
 
 /** Vendor identification for every party paid in the year. */
@@ -958,7 +1029,7 @@ export async function computeFiling(args: {
   const threshold = args.threshold ?? form.defaultThreshold;
   // Sequential loads: recomputation owns a serializable transaction on one
   // pg client — fanning out queues concurrent queries on that connection.
-  const traces = await loadPaymentTraces({
+  const yearPayments = await loadYearPayments({
     orgId: args.orgId,
     taxYear: args.taxYear,
     subsidiaryId: args.subsidiaryId ?? null,
@@ -967,19 +1038,21 @@ export async function computeFiling(args: {
   const boxByAccount = await loadBoxRules(args.orgId, args.formType, runner);
   const profiles = await loadRecipientProfiles({
     orgId: args.orgId,
-    partyIds: [...traces.keys()],
+    partyIds: [...yearPayments.keys()],
     runner,
   });
 
   // Account names only for the accounts an exception will actually name.
   const accountNames = new Map<string, string>();
   const validBoxes = new Set(form.boxes.map((b) => b.key));
+  const withholdingBoxes = new Set(form.boxes.filter((b) => b.isWithholding).map((b) => b.key));
+  const rulesReachWithholding = [...boxByAccount.values()].some((box) => withholdingBoxes.has(box));
 
-  const recipients: RecipientComputation[] = [];
-  const exceptions: ComputationException[] = [];
-  let tracedCash = "0";
-
-  for (const [partyId, payments] of traces) {
+  const placements = new Map<
+    string,
+    { profile: RecipientProfile; onThisForm: boolean; defaultBox: string; allocated: boolean }
+  >();
+  for (const partyId of yearPayments.keys()) {
     const profile = profiles.get(partyId);
     if (!profile) continue;
     // Vendors whose resolved form is THIS form belong in this filing — plus
@@ -996,16 +1069,45 @@ export async function computeFiling(args: {
       profile.defaultBox && validBoxes.has(profile.defaultBox)
         ? profile.defaultBox
         : form.defaultBox;
-    const summary = summarizeRecipient({
-      form,
-      payments,
-      boxByAccount,
-      defaultBox,
-      filingThreshold: threshold,
-    });
+    // Spend is allocated to boxes, through the bills each payment settled,
+    // whenever a box can matter: the vendor is on this filing or reportable,
+    // or a withholding box could receive part of its spend.
+    const allocated =
+      onThisForm || profile.reportable || rulesReachWithholding || withholdingBoxes.has(defaultBox);
+    placements.set(partyId, { profile, onThisForm, defaultBox, allocated });
+  }
+  const settled = await loadSettledBills(
+    args.orgId,
+    [...placements]
+      .filter(([, placement]) => placement.allocated)
+      .flatMap(([partyId]) => yearPayments.get(partyId) ?? []),
+    runner,
+  );
+
+  const recipients: RecipientComputation[] = [];
+  const exceptions: ComputationException[] = [];
+  let tracedCash = "0";
+
+  for (const [partyId, paid] of yearPayments) {
+    const placement = placements.get(partyId);
+    if (!placement) continue;
+    const { profile, onThisForm, defaultBox } = placement;
+    const payments: PaymentTrace[] = paid.map((payment) => ({
+      ...payment,
+      bills: settled.get(payment.paymentId) ?? [],
+    }));
+    const summary = placement.allocated
+      ? summarizeRecipient({
+          form,
+          payments,
+          boxByAccount,
+          defaultBox,
+          filingThreshold: threshold,
+        })
+      : summarizeOutsideFiling({ form, payments: paid, filingThreshold: threshold });
     tracedCash = add(tracedCash, summary.amounts.tracedCash);
 
-    if (summary.unmappedAccountIds.length > 0 && (onThisForm || unassigned)) {
+    if (summary.unmappedAccountIds.length > 0 && onThisForm) {
       const missing = summary.unmappedAccountIds.filter((id) => !accountNames.has(id));
       if (missing.length > 0) {
         const named = await runner.execute<{ id: string; label: string }>(

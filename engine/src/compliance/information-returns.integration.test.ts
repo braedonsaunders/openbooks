@@ -4,6 +4,7 @@ import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import {
+  computeFiling,
   ensureFiling,
   finalizeFiling,
   InformationReturnError,
@@ -1129,6 +1130,47 @@ test(
       assert.equal(trace.cash, "2900.0000");
       assert.equal(trace.backupWithheld, "100.0000");
       assert.equal(trace.withholdingDeductionIds?.length, 1);
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
+
+test(
+  "a vendor outside the filing reports cash plus backup withholding and keeps its refusals",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      await seedInformationReturnPayment(org, actorId, "3000", "OUTSIDE", {
+        cashAmount: "2760",
+        backupWithholdingAmount: "240",
+      });
+      await db.execute(sql`
+        update vendor_roles set is_t4a = false, information_return_form = null
+         where org_id = ${org.orgId} and party_id = ${org.vendorId}`);
+      const taxYear = Number(org.date.slice(0, 4));
+
+      const nec = await computeFiling({
+        orgId: org.orgId,
+        taxYear,
+        formType: "1099-NEC",
+        currency: "CAD",
+      });
+      assert.deepEqual(nec.recipients, [], "an unflagged vendor is not a recipient");
+      assert.equal(nec.tracedCash, "2760.0000", "traced cash is what left the bank");
+      assert.deepEqual(
+        nec.exceptions
+          .filter((exception) => exception.kind === "unflagged_over_threshold")
+          .map((exception) => [exception.partyId, exception.amount]),
+        [[org.vendorId, "3000.0000"]],
+        "the unflagged vendor is named at cash paid plus backup withholding",
+      );
+      await assert.rejects(
+        computeFiling({ orgId: org.orgId, taxYear, formType: "T4A", currency: "CAD" }),
+        /cannot be reported on a Canadian T4A/,
+      );
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }
