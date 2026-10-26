@@ -1,13 +1,12 @@
-/**
- * Invoice revenue-recognition cancellation: reverse recognition journals,
- * then route the invoice through the controlled void — in one transaction.
- * Moved verbatim from revenue/recognition.ts; the
- * document-void import is static here because the caller now lives in ledger.
- */
+/** Invoice revenue-recognition cancellation through the controlled void. */
 import { sql } from "drizzle-orm";
 import { neg } from "../money/money.ts";
 import { db, withOrg } from "../platform/db.ts";
-import { CloseError, assertPeriodModulesOpen, periodClosedDetailsOf } from "../periods/period-policy.ts";
+import {
+  CloseError,
+  assertPeriodModulesOpen,
+  periodClosedDetailsOf,
+} from "../periods/period-policy.ts";
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
 import { ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
@@ -45,26 +44,35 @@ function cancellationReason(value: string): string {
 }
 
 function cancellationDate(value: string): string {
-  if (
-    !/^\d{4}-\d{2}-\d{2}$/.test(value) ||
-    Number.isNaN(Date.parse(`${value}T00:00:00Z`))
-  ) {
-    throw new RevenueRecognitionCancellationError(
-      "reversalDate must be a valid YYYY-MM-DD date",
-    );
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(Date.parse(`${value}T00:00:00Z`))) {
+    throw new RevenueRecognitionCancellationError("reversalDate must be a valid YYYY-MM-DD date");
   }
   return value;
 }
 
+/** Kind and legal entity of one organization document, for scope checks. */
+export async function cancellationDocumentScope(
+  orgId: string,
+  documentId: string,
+): Promise<{ kind: string; subsidiaryId: string | null } | undefined> {
+  const found = await db.execute<{ kind: string; subsidiaryId: string | null }>(
+    sql`
+    select kind, subsidiary_id as "subsidiaryId"
+      from documents
+     where id = ${documentId} and org_id = ${orgId}
+  `,
+    "objects",
+  );
+  return found[0];
+}
+
 /**
- * Cancel all revenue-recognition activity sourced by an invoice, then route the
- * invoice through the normal controlled-void workflow.
+ * Cancel all recognition activity sourced by an invoice, then route the invoice
+ * through the normal controlled-void workflow.
  *
- * Posted recognition journals are never edited or detached. Each receives one
- * exact, row-locked compensating journal and the schedule line stores both ids.
- * Unposted schedule lines remain as historical plan evidence but are made
- * ineligible by the cancelled obligation. Retries and concurrent callers return
- * the same lineage.
+ * Posted journals receive exact, row-locked compensating entries; their source
+ * rows remain immutable. Unposted lines remain as plan evidence but are made
+ * ineligible by the cancelled obligation. Retries return the same lineage.
  */
 export async function cancelRevenueRecognitionForInvoice(input: {
   documentId: string;
@@ -76,9 +84,7 @@ export async function cancelRevenueRecognitionForInvoice(input: {
   allowedSubsidiaryIds: ReadonlySet<string> | null;
 }): Promise<CancelRevenueRecognitionResult> {
   if (!input.actorId) {
-    throw new RevenueRecognitionCancellationError(
-      "an attributable actor is required",
-    );
+    throw new RevenueRecognitionCancellationError("an attributable actor is required");
   }
   const reason = cancellationReason(input.reason);
   const reversalDate = cancellationDate(input.reversalDate);
@@ -94,15 +100,16 @@ export async function cancelRevenueRecognitionForInvoice(input: {
     try {
       return await withOrg(input.orgId, () =>
         db.transaction(async (tx) => {
-      const document = (await tx.execute<{
-        id: string;
-        status: string;
-        subsidiary_id: string | null;
-        reversal_entry_id: string | null;
-        void_requested_at: Date | null;
-        void_reason: string | null;
-        void_reversal_date: string | null;
-      }>(sql`
+          const document = await tx.execute<{
+            id: string;
+            status: string;
+            subsidiary_id: string | null;
+            reversal_entry_id: string | null;
+            void_requested_at: Date | null;
+            void_reason: string | null;
+            void_reversal_date: string | null;
+          }>(
+            sql`
         select id, status, subsidiary_id, reversal_entry_id, void_requested_at,
                void_reason, void_reversal_date
           from documents
@@ -110,25 +117,28 @@ export async function cancelRevenueRecognitionForInvoice(input: {
            and org_id = ${input.orgId}
            and kind = 'customer_invoice'
          for update
-      `, "objects"));
-      const doc = document[0];
-      // Scope is rechecked under the invoice lock: the route's unlocked
-      // pre-read can authorize entity A while a concurrent A→B rehome lands
-      // before this cancel commits. Missing and out-of-scope answer alike.
-      if (!doc || !subsidiaryScopeAllows(input.allowedSubsidiaryIds, doc.subsidiary_id)) {
-        throw new ScopeNotFoundError();
-      }
-      if (!["posted", "voided"].includes(doc.status)) {
-        throw new RevenueRecognitionCancellationError(
-          `customer invoice is ${doc.status}; only a posted invoice can be cancelled`,
-        );
-      }
+      `,
+            "objects",
+          );
+          const doc = document[0];
+          // Scope is rechecked under the invoice lock: the route's unlocked
+          // pre-read can authorize entity A while a concurrent A→B rehome lands
+          // before this cancel commits. Missing and out-of-scope answer alike.
+          if (!doc || !subsidiaryScopeAllows(input.allowedSubsidiaryIds, doc.subsidiary_id)) {
+            throw new ScopeNotFoundError();
+          }
+          if (!["posted", "voided"].includes(doc.status)) {
+            throw new RevenueRecognitionCancellationError(
+              `customer invoice is ${doc.status}; only a posted invoice can be cancelled`,
+            );
+          }
 
-      // A retry may resume only the exact controlled-void request created by
-      // this cancellation. Durable audit evidence binds its reason and date;
-      // an unrelated pending void must never be completed as a side effect.
-      if (doc.void_requested_at) {
-        const evidence = await tx.execute(sql`
+          // A retry may resume only the exact controlled-void request created by
+          // this cancellation. Durable audit evidence binds its reason and date;
+          // an unrelated pending void must never be completed as a side effect.
+          if (doc.void_requested_at) {
+            const evidence = await tx.execute(
+              sql`
           select 1 from audit_log
            where org_id = ${input.orgId}
              and table_name = 'performance_obligations'
@@ -138,15 +148,18 @@ export async function cancelRevenueRecognitionForInvoice(input: {
              and changes->>'reason' = ${reason}
              and changes->>'reversalDate' = ${reversalDate}
            limit 1
-        `, "objects");
-        if (!evidence[0]) {
-          throw new RevenueRecognitionCancellationError(
-            'this invoice already has a different pending void request — resume or reject that request before cancelling recognition',
-          );
-        }
-      }
+        `,
+              "objects",
+            );
+            if (!evidence[0]) {
+              throw new RevenueRecognitionCancellationError(
+                "this invoice already has a different pending void request — resume or reject that request before cancelling recognition",
+              );
+            }
+          }
 
-      const affectedContracts = await tx.execute<{ contract_id: string }>(sql`
+          const affectedContracts = await tx.execute<{ contract_id: string }>(
+            sql`
         select contract_id from (
           select distinct obligation.contract_id
             from performance_obligations obligation
@@ -156,9 +169,13 @@ export async function cancelRevenueRecognitionForInvoice(input: {
           select billing.contract_id from revenue_contract_billings billing
            where billing.org_id = ${input.orgId} and billing.document_id = ${input.documentId}
         ) contracts
-        order by contract_id`, "objects");
-      for (const contract of affectedContracts) await lockRevenueContract(tx, input.orgId, contract.contract_id);
-      const obligations = (await tx.execute<{ id: string; contract_id: string; status: string }>(sql`
+        order by contract_id`,
+            "objects",
+          );
+          for (const contract of affectedContracts)
+            await lockRevenueContract(tx, input.orgId, contract.contract_id);
+          const obligations = await tx.execute<{ id: string; contract_id: string; status: string }>(
+            sql`
         select obligation.id, obligation.contract_id, obligation.status
           from performance_obligations obligation
           join document_lines line
@@ -167,20 +184,23 @@ export async function cancelRevenueRecognitionForInvoice(input: {
            and line.document_id = ${input.documentId}
          order by obligation.id
          for update of obligation
-      `, "objects"));
-      if (obligations.length === 0) {
-        throw new RevenueRecognitionCancellationError(
-          "invoice has no revenue-recognition obligations",
-        );
-      }
+      `,
+            "objects",
+          );
+          if (obligations.length === 0) {
+            throw new RevenueRecognitionCancellationError(
+              "invoice has no revenue-recognition obligations",
+            );
+          }
 
-      const adjustVoidedBillings = async (): Promise<void> => {
-        const billings = await tx.execute<{
-          contract_id: string;
-          amount: string;
-          total_transaction_price: string;
-          total_consideration: string;
-        }>(sql`
+          const adjustVoidedBillings = async (): Promise<void> => {
+            const billings = await tx.execute<{
+              contract_id: string;
+              amount: string;
+              total_transaction_price: string;
+              total_consideration: string;
+            }>(
+              sql`
           select billing.contract_id, billing.amount::text as amount,
                  contract.total_transaction_price::text as total_transaction_price,
                  contract.total_consideration::text as total_consideration
@@ -189,24 +209,33 @@ export async function cancelRevenueRecognitionForInvoice(input: {
               on contract.id = billing.contract_id and contract.org_id = billing.org_id
            where billing.org_id = ${input.orgId} and billing.document_id = ${input.documentId}
            order by billing.contract_id
-           for update of billing, contract`, "objects");
-        if (billings.length === 0) return;
-        const evidence = (await tx.execute<{ id: string }>(sql`
+           for update of billing, contract`,
+              "objects",
+            );
+            if (billings.length === 0) return;
+            const evidence = (
+              await tx.execute<{ id: string }>(
+                sql`
           select id from audit_log
            where org_id = ${input.orgId} and table_name = 'revenue_contract_billings'
              and row_id = ${input.documentId} and action = 'reverse'
              and request_id = 'revenue_recognition_cancellation'
              and changes->>'mode' = 'revenue_contract_billing_cancellation'
-           limit 1`, "objects"))[0];
-        if (evidence) return;
+           limit 1`,
+                "objects",
+              )
+            )[0];
+            if (evidence) return;
 
-        const adjustments: Array<Record<string, string>> = [];
-        for (const billing of billings) {
-          const updated = (await tx.execute<{
-            id: string;
-            total_transaction_price: string;
-            total_consideration: string;
-          }>(sql`
+            const adjustments: Array<Record<string, string>> = [];
+            for (const billing of billings) {
+              const updated = (
+                await tx.execute<{
+                  id: string;
+                  total_transaction_price: string;
+                  total_consideration: string;
+                }>(
+                  sql`
             update revenue_contracts
                set total_transaction_price = total_transaction_price - ${billing.amount},
                    total_consideration = total_consideration - ${billing.amount},
@@ -215,39 +244,43 @@ export async function cancelRevenueRecognitionForInvoice(input: {
              where org_id = ${input.orgId} and id = ${billing.contract_id}
                and total_transaction_price >= ${billing.amount}
                and total_consideration >= ${billing.amount}
-            returning id, total_transaction_price::text, total_consideration::text`, "objects"))[0];
-          if (!updated) {
-            throw new RevenueRecognitionCancellationError(
-              "the contract consideration no longer covers this invoice; reconcile the contract before cancelling recognition",
-            );
-          }
-          adjustments.push({
-            contractId: billing.contract_id,
-            amount: billing.amount,
-            totalTransactionPriceBefore: billing.total_transaction_price,
-            totalTransactionPriceAfter: updated.total_transaction_price,
-            totalConsiderationBefore: billing.total_consideration,
-            totalConsiderationAfter: updated.total_consideration,
-          });
-        }
-        await tx.execute(sql`
+            returning id, total_transaction_price::text, total_consideration::text`,
+                  "objects",
+                )
+              )[0];
+              if (!updated) {
+                throw new RevenueRecognitionCancellationError(
+                  "the contract consideration no longer covers this invoice; reconcile the contract before cancelling recognition",
+                );
+              }
+              adjustments.push({
+                contractId: billing.contract_id,
+                amount: billing.amount,
+                totalTransactionPriceBefore: billing.total_transaction_price,
+                totalTransactionPriceAfter: updated.total_transaction_price,
+                totalConsiderationBefore: billing.total_consideration,
+                totalConsiderationAfter: updated.total_consideration,
+              });
+            }
+            await tx.execute(sql`
           insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
           values (${input.orgId}, 'revenue_contract_billings', ${input.documentId}, 'reverse',
                   ${JSON.stringify({ mode: "revenue_contract_billing_cancellation", reason, adjustments })}::jsonb,
                   ${input.actorId}, 'revenue_recognition_cancellation')
         `);
-      };
+          };
 
-      const obligationIds = obligations.map((row) => row.id);
-      const sources = (await tx.execute<{
-          line_id: string;
-          journal_entry_id: string;
-          reversal_journal_entry_id: string | null;
-          entry_number: string;
-          book_id: string;
-          subsidiary_id: string;
-          entry_status: string;
-        }>(sql`
+          const obligationIds = obligations.map((row) => row.id);
+          const sources = await tx.execute<{
+            line_id: string;
+            journal_entry_id: string;
+            reversal_journal_entry_id: string | null;
+            entry_number: string;
+            book_id: string;
+            subsidiary_id: string;
+            entry_status: string;
+          }>(
+            sql`
         select schedule_line.id as line_id,
                schedule_line.journal_entry_id,
                schedule_line.reversal_journal_entry_id,
@@ -267,70 +300,78 @@ export async function cancelRevenueRecognitionForInvoice(input: {
              any(${`{${obligationIds.join(",")}}`}::uuid[])
          order by schedule_line.created_at, schedule_line.id
          for update of schedule_line, entry
-      `, "objects"));
+      `,
+            "objects",
+          );
 
-      const reversalIds: string[] = [];
-      for (const source of sources) {
-        if (source.reversal_journal_entry_id) {
-          reversalIds.push(source.reversal_journal_entry_id);
-          continue;
-        }
-        if (source.entry_status !== "posted") {
-          throw new RevenueRecognitionCancellationError(
-            `${source.entry_number} is ${source.entry_status} without recorded cancellation lineage`,
-          );
-        }
-        const period = await resolveCoveringPeriod(tx, input.orgId, reversalDate, source.subsidiary_id);
-        if (!period) {
-          throw new RevenueRecognitionCancellationError(
-            `no active entity accounting period covers ${reversalDate}`,
-          );
-        }
-        // One period gate: the shared GL check replaces the raw
-        // period_module_is_closed predicate. A reversal is new activity, not
-        // historical replay, so source-owned imported locks refuse exactly
-        // like user locks.
-        try {
-          await assertPeriodModulesOpen(tx, {
-            orgId: input.orgId,
-            periodId: period.id,
-            bookId: source.book_id,
-            subsidiaryIds: [source.subsidiary_id],
-            modules: ["gl"],
-          });
-        } catch (error) {
-          if (error instanceof CloseError) {
-            throw new RevenueRecognitionCancellationError(
-              `the GL period covering ${reversalDate} is closed`,
-              periodClosedDetailsOf(error),
+          const reversalIds: string[] = [];
+          for (const source of sources) {
+            if (source.reversal_journal_entry_id) {
+              reversalIds.push(source.reversal_journal_entry_id);
+              continue;
+            }
+            if (source.entry_status !== "posted") {
+              throw new RevenueRecognitionCancellationError(
+                `${source.entry_number} is ${source.entry_status} without recorded cancellation lineage`,
+              );
+            }
+            const period = await resolveCoveringPeriod(
+              tx,
+              input.orgId,
+              reversalDate,
+              source.subsidiary_id,
             );
-          }
-          throw error;
-        }
+            if (!period) {
+              throw new RevenueRecognitionCancellationError(
+                `no active entity accounting period covers ${reversalDate}`,
+              );
+            }
+            // One period gate: the shared GL check replaces the raw
+            // period_module_is_closed predicate. A reversal is new activity, not
+            // historical replay, so source-owned imported locks refuse exactly
+            // like user locks.
+            try {
+              await assertPeriodModulesOpen(tx, {
+                orgId: input.orgId,
+                periodId: period.id,
+                bookId: source.book_id,
+                subsidiaryIds: [source.subsidiary_id],
+                modules: ["gl"],
+              });
+            } catch (error) {
+              if (error instanceof CloseError) {
+                throw new RevenueRecognitionCancellationError(
+                  `the GL period covering ${reversalDate} is closed`,
+                  periodClosedDetailsOf(error),
+                );
+              }
+              throw error;
+            }
 
-        // The cancellation mirrors the source lines exactly through the ONE
-        // ledger API; the source entry is then marked reversed — never edited.
-        const mirrorSource = await tx.execute<{
-          line_number: number;
-          account_id: string;
-          subsidiary_id: string;
-          amount: string;
-          currency: string | null;
-          txn_amount: string;
-          fx_rate: string;
-          party_id: string | null;
-          department_id: string | null;
-          project_id: string | null;
-          location_id: string | null;
-          class_id: string | null;
-          equipment_unit_id: string | null;
-          payment_card_id: string | null;
-          extra_dims: unknown;
-          tax_code_id: string | null;
-          quantity: string | null;
-          unit: string | null;
-          custom: unknown;
-        }>(sql`
+            // The cancellation mirrors the source lines exactly through the ONE
+            // ledger API; the source entry is then marked reversed — never edited.
+            const mirrorSource = await tx.execute<{
+              line_number: number;
+              account_id: string;
+              subsidiary_id: string;
+              amount: string;
+              currency: string | null;
+              txn_amount: string;
+              fx_rate: string;
+              party_id: string | null;
+              department_id: string | null;
+              project_id: string | null;
+              location_id: string | null;
+              class_id: string | null;
+              equipment_unit_id: string | null;
+              payment_card_id: string | null;
+              extra_dims: unknown;
+              tax_code_id: string | null;
+              quantity: string | null;
+              unit: string | null;
+              custom: unknown;
+            }>(
+              sql`
           select line_number, account_id, subsidiary_id, amount::text as amount,
                  currency, txn_amount::text as txn_amount, fx_rate::text as fx_rate,
                  party_id, department_id, project_id, location_id, class_id,
@@ -339,53 +380,59 @@ export async function cancelRevenueRecognitionForInvoice(input: {
             from journal_lines
            where entry_id = ${source.journal_entry_id} and org_id = ${input.orgId}
            order by line_number
-        `, "objects");
-        const postedCancel = await postEntry(tx, {
-          orgId: input.orgId,
-          bookId: source.book_id,
-          subsidiaryId: source.subsidiary_id,
-          entryNumber: `${source.entry_number}-CANCEL`,
-          postingDate: reversalDate,
-          periodId: period.id,
-          memo: `Revenue recognition cancellation — ${reason}`,
-          origin: "revenue_recognition",
-          reversesEntryId: source.journal_entry_id,
-          actorId: input.actorId,
-          lines: mirrorSource.map((line) => ({
-            accountId: line.account_id,
-            subsidiaryId: line.subsidiary_id,
-            amount: neg(line.amount),
-            currency: line.currency,
-            txnAmount: neg(line.txn_amount),
-            fxRate: line.fx_rate,
-            memo: `Revenue recognition cancellation — ${reason}`,
-            partyId: line.party_id,
-            departmentId: line.department_id,
-            projectId: line.project_id,
-            locationId: line.location_id,
-            classId: line.class_id,
-            equipmentUnitId: line.equipment_unit_id,
-            paymentCardId: line.payment_card_id,
-            extraDims: (line.extra_dims ?? {}) as Record<string, unknown>,
-            taxCodeId: line.tax_code_id,
-            quantity: line.quantity == null ? null : neg(line.quantity),
-            unit: line.unit,
-            custom: (line.custom ?? {}) as Record<string, unknown>,
-            lineNumber: line.line_number,
-          })),
-        });
-        const reversalId = postedCancel.entryId;
-        await markEntryReversed(tx, { orgId: input.orgId, entryId: source.journal_entry_id, actorId: input.actorId });
-        await tx.execute(sql`
+        `,
+              "objects",
+            );
+            const postedCancel = await postEntry(tx, {
+              orgId: input.orgId,
+              bookId: source.book_id,
+              subsidiaryId: source.subsidiary_id,
+              entryNumber: `${source.entry_number}-CANCEL`,
+              postingDate: reversalDate,
+              periodId: period.id,
+              memo: `Revenue recognition cancellation — ${reason}`,
+              origin: "revenue_recognition",
+              reversesEntryId: source.journal_entry_id,
+              actorId: input.actorId,
+              lines: mirrorSource.map((line) => ({
+                accountId: line.account_id,
+                subsidiaryId: line.subsidiary_id,
+                amount: neg(line.amount),
+                currency: line.currency,
+                txnAmount: neg(line.txn_amount),
+                fxRate: line.fx_rate,
+                memo: `Revenue recognition cancellation — ${reason}`,
+                partyId: line.party_id,
+                departmentId: line.department_id,
+                projectId: line.project_id,
+                locationId: line.location_id,
+                classId: line.class_id,
+                equipmentUnitId: line.equipment_unit_id,
+                paymentCardId: line.payment_card_id,
+                extraDims: (line.extra_dims ?? {}) as Record<string, unknown>,
+                taxCodeId: line.tax_code_id,
+                quantity: line.quantity == null ? null : neg(line.quantity),
+                unit: line.unit,
+                custom: (line.custom ?? {}) as Record<string, unknown>,
+                lineNumber: line.line_number,
+              })),
+            });
+            const reversalId = postedCancel.entryId;
+            await markEntryReversed(tx, {
+              orgId: input.orgId,
+              entryId: source.journal_entry_id,
+              actorId: input.actorId,
+            });
+            await tx.execute(sql`
           update recognition_schedule_lines
              set reversal_journal_entry_id = ${reversalId},
                  updated_at = now(), updated_by = ${input.actorId}
            where id = ${source.line_id} and org_id = ${input.orgId}
         `);
-        reversalIds.push(reversalId);
-      }
+            reversalIds.push(reversalId);
+          }
 
-      await tx.execute(sql`
+          await tx.execute(sql`
         update performance_obligations
            set status = 'cancelled',
                cancellation_reason = coalesce(cancellation_reason, ${reason}),
@@ -396,7 +443,7 @@ export async function cancelRevenueRecognitionForInvoice(input: {
            and org_id = ${input.orgId}
            and status <> 'cancelled'
       `);
-      await tx.execute(sql`
+          await tx.execute(sql`
         update recognition_schedules
            set status = 'cancelled', updated_at = now(),
                updated_by = ${input.actorId}
@@ -405,8 +452,8 @@ export async function cancelRevenueRecognitionForInvoice(input: {
            and org_id = ${input.orgId}
            and status <> 'cancelled'
       `);
-      const contractIds = [...new Set(obligations.map((row) => row.contract_id))];
-      await tx.execute(sql`
+          const contractIds = [...new Set(obligations.map((row) => row.contract_id))];
+          await tx.execute(sql`
         update revenue_contracts contract
            set status = 'cancelled', updated_at = now(),
                updated_by = ${input.actorId}
@@ -420,8 +467,8 @@ export async function cancelRevenueRecognitionForInvoice(input: {
                 and obligation.status <> 'cancelled'
            )
       `);
-      if (!doc.void_requested_at) {
-        await tx.execute(sql`
+          if (!doc.void_requested_at) {
+            await tx.execute(sql`
           insert into audit_log
             (org_id, table_name, row_id, action, changes, actor_id, request_id)
           values (
@@ -436,24 +483,25 @@ export async function cancelRevenueRecognitionForInvoice(input: {
             ${input.actorId}, 'revenue_recognition_cancellation'
           )
         `);
-      }
-      if (doc.status === "voided") {
-        await adjustVoidedBillings();
-        return {
-          status: "cancelled" as const,
-          recognitionReversalEntryIds: reversalIds,
-          invoiceReversalEntryId: doc.reversal_entry_id,
-          runId: null,
-        };
-      }
+          }
+          if (doc.status === "voided") {
+            await adjustVoidedBillings();
+            return {
+              status: "cancelled" as const,
+              recognitionReversalEntryIds: reversalIds,
+              invoiceReversalEntryId: doc.reversal_entry_id,
+              runId: null,
+            };
+          }
 
-      // The normal void path owns document reversal, approval routing, audit
-      // snapshots, applications, and period controls. Run it while this
-      // transaction is still open so a failure rolls back the recognition
-      // reversals as well. An overlapping request is completed rather than
-      // claimed a second time.
-      if (doc.void_requested_at) {
-        const pending = await tx.execute<{ run_id: string }>(sql`
+          // The normal void path owns document reversal, approval routing, audit
+          // snapshots, applications, and period controls. Run it while this
+          // transaction is still open so a failure rolls back the recognition
+          // reversals as well. An overlapping request is completed rather than
+          // claimed a second time.
+          if (doc.void_requested_at) {
+            const pending = await tx.execute<{ run_id: string }>(
+              sql`
           select run.id as run_id
             from flow_runs run
             join flow_gates gate
@@ -465,20 +513,23 @@ export async function cancelRevenueRecognitionForInvoice(input: {
              and gate.status in ('pending', 'escalated')
            order by run.started_at desc, run.id desc
            limit 1
-        `, "objects");
-        if (pending[0]) {
-          return {
-            status: "pending_approval" as const,
-            recognitionReversalEntryIds: reversalIds,
-            invoiceReversalEntryId: null,
-            runId: pending[0].run_id,
-          };
-        }
-        // The waiting-only probe above cannot see the rest of the gate
-        // lifecycle. A retry must never complete the void while approval is
-        // still in flight, nor after the approval run refused or errored —
-        // only a completed run (or no run at all) authorizes completion.
-        const lifecycle = await tx.execute<{ id: string; status: string }>(sql`
+        `,
+              "objects",
+            );
+            if (pending[0]) {
+              return {
+                status: "pending_approval" as const,
+                recognitionReversalEntryIds: reversalIds,
+                invoiceReversalEntryId: null,
+                runId: pending[0].run_id,
+              };
+            }
+            // The waiting-only probe above cannot see the rest of the gate
+            // lifecycle. A retry must never complete the void while approval is
+            // still in flight, nor after the approval run refused or errored —
+            // only a completed run (or no run at all) authorizes completion.
+            const lifecycle = await tx.execute<{ id: string; status: string }>(
+              sql`
           select run.id, run.status
             from flow_runs run
            where run.org_id = ${input.orgId}
@@ -487,56 +538,57 @@ export async function cancelRevenueRecognitionForInvoice(input: {
              and run.started_at >= ${doc.void_requested_at}
            order by run.started_at desc, run.id desc
            limit 1
-        `, "objects");
-        const run = lifecycle[0];
-        if (run && run.status === "running") {
+        `,
+              "objects",
+            );
+            const run = lifecycle[0];
+            if (run && run.status === "running") {
+              return {
+                status: "pending_approval" as const,
+                recognitionReversalEntryIds: reversalIds,
+                invoiceReversalEntryId: null,
+                runId: run.id,
+              };
+            }
+            if (run && (run.status === "failed" || run.status === "cancelled")) {
+              throw new RevenueRecognitionCancellationError(
+                `the before-void approval ${run.status} — ask an approver to re-run the approval before cancelling; the invoice remains posted`,
+              );
+            }
+            const invoiceReversalEntryId = await completeRequestedDocumentVoid(
+              input.documentId,
+              input.orgId,
+            );
+            await adjustVoidedBillings();
+            return {
+              status: "cancelled" as const,
+              recognitionReversalEntryIds: reversalIds,
+              invoiceReversalEntryId,
+              runId: null,
+            };
+          }
+          const requested = await requestDocumentVoid({
+            documentId: input.documentId,
+            orgId: input.orgId,
+            actorId: input.actorId,
+            reason,
+            reversalDate,
+            source: "api",
+          });
+          if (requested.status === "voided") await adjustVoidedBillings();
           return {
-            status: "pending_approval" as const,
+            status: requested.status === "voided" ? "cancelled" : "pending_approval",
             recognitionReversalEntryIds: reversalIds,
-            invoiceReversalEntryId: null,
-            runId: run.id,
+            invoiceReversalEntryId: requested.reversalEntryId,
+            runId: requested.runId,
           };
-        }
-        if (run && (run.status === "failed" || run.status === "cancelled")) {
-          throw new RevenueRecognitionCancellationError(
-            `the before-void approval ${run.status} — ask an approver to re-run the approval before cancelling; the invoice remains posted`,
-          );
-        }
-        const invoiceReversalEntryId =
-          await completeRequestedDocumentVoid(input.documentId, input.orgId);
-        await adjustVoidedBillings();
-        return {
-          status: "cancelled" as const,
-          recognitionReversalEntryIds: reversalIds,
-          invoiceReversalEntryId,
-          runId: null,
-        };
-      }
-      const requested = await requestDocumentVoid({
-        documentId: input.documentId,
-        orgId: input.orgId,
-        actorId: input.actorId,
-        reason,
-        reversalDate,
-        source: "api",
-      });
-      if (requested.status === "voided") await adjustVoidedBillings();
-      return {
-        status:
-          requested.status === "voided" ? "cancelled" : "pending_approval",
-        recognitionReversalEntryIds: reversalIds,
-        invoiceReversalEntryId: requested.reversalEntryId,
-        runId: requested.runId,
-      };
-    }),
-  );
+        }),
+      );
     } catch (error) {
       // Preserve the previous bounded retry behavior, but retry the complete
       // unit so a failed void never leaves durable recognition side effects.
       if (attempt === 2) throw error;
     }
   }
-  throw new RevenueRecognitionCancellationError(
-    "invoice cancellation could not be finalized",
-  );
+  throw new RevenueRecognitionCancellationError("invoice cancellation could not be finalized");
 }

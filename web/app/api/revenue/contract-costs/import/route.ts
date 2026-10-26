@@ -1,33 +1,35 @@
-import { NextResponse } from 'next/server'
-import { z } from 'zod'
-import { importCommissionCosts } from '@openbooks/engine/revenue'
-import { defineRoute } from '@/lib/api/route'
-import { isoDate, parseJsonBody, uuidId } from '@/lib/api/json'
-import { contractCostErrorResponse, parseCostAmountMinor } from '@/lib/contract-costs'
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { importCommissionCosts } from "@openbooks/engine/revenue";
+import { defineRoute } from "@/lib/api/route";
+import { isoDate, uuidId } from "@/lib/api/json";
+import { contractCostErrorResponse, parseCostAmountMinor } from "@/lib/contract-costs";
 
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 const scopedId = (label: string) =>
   z
     .string({ error: `invalid ${label}` })
     .refine((v) => uuidId.safeParse(v).success, `invalid ${label}`)
-    .optional()
+    .optional();
 
 const importRow = z.object({
-  repPartyId: scopedId('rep'),
-  customerPartyId: scopedId('customer'),
+  repPartyId: scopedId("rep"),
+  customerPartyId: scopedId("customer"),
   contractNumber: z.string().max(60).optional(),
-  costType: z.enum(['commission', 'fulfilment']).optional(),
+  costType: z.enum(["commission", "fulfilment"]).optional(),
   amount: z.string().min(1),
   currency: z.string().min(3).max(3),
   date: isoDate(),
-  method: z.enum(['straight_line', 'pattern']).optional(),
-  originalExpenseAccountId: z.string().refine((v) => uuidId.safeParse(v).success, 'invalid account'),
+  method: z.enum(["straight_line", "pattern"]).optional(),
+  originalExpenseAccountId: z
+    .string()
+    .refine((v) => uuidId.safeParse(v).success, "invalid account"),
   renewalCommission: z.string().optional(),
   ref: z.string().max(200).optional(),
-})
+});
 
-const importBody = z.object({ rows: z.array(importRow).min(1).max(500) })
+const importBody = z.object({ rows: z.array(importRow).min(1).max(500) });
 
 /**
  * Import CaptivateIQ/QuotaPath-style commission rows. Every row answers
@@ -35,15 +37,15 @@ const importBody = z.object({ rows: z.array(importRow).min(1).max(500) })
  * and a bad row refuses with its remedy without blocking its siblings.
  */
 export const POST = defineRoute({
-  permission: 'contract_costs.manage',
-  feature: 'contractCosts',
-  handler: async ({ request: req, authz: gate }) => {
-    const user = gate.user
-    const parsed = await parseJsonBody(req, importBody, { status: 422 })
-    if (!parsed.ok) return parsed.response
+  permission: "contract_costs.manage",
+  feature: "contractCosts",
+  body: importBody,
+  invalidBodyStatus: 422,
+  handler: async ({ authz: gate, body }) => {
+    const user = gate.user;
     try {
-      const rows = []
-      for (const row of parsed.data.rows) {
+      const rows = [];
+      for (const row of body.rows) {
         rows.push({
           repPartyId: row.repPartyId,
           customerPartyId: row.customerPartyId,
@@ -55,15 +57,17 @@ export const POST = defineRoute({
           method: row.method,
           originalExpenseAccountId: row.originalExpenseAccountId,
           renewalCommissionMinor: row.renewalCommission
-            ? await parseCostAmountMinor(user.orgId, row.renewalCommission, row.currency, { allowZero: true })
+            ? await parseCostAmountMinor(user.orgId, row.renewalCommission, row.currency, {
+                allowZero: true,
+              })
             : undefined,
           ref: row.ref,
-        })
+        });
       }
-      const result = await importCommissionCosts({ orgId: user.orgId, actorId: user.id, rows })
-      return NextResponse.json({ rows: result }, { status: 201 })
+      const result = await importCommissionCosts({ orgId: user.orgId, actorId: user.id, rows });
+      return NextResponse.json({ rows: result }, { status: 201 });
     } catch (e: unknown) {
-      return contractCostErrorResponse(e, 'Unable to import the commission rows.')
+      return contractCostErrorResponse(e, "Unable to import the commission rows.");
     }
   },
-})
+});

@@ -1,4 +1,3 @@
-/** Read-only recognition preview with confirm fingerprint. Split from revenue/recognition.ts (pure moves only). */
 import { createHash } from "node:crypto";
 import { canonicalJson } from "../platform/canonical-json.ts";
 import { sql } from "drizzle-orm";
@@ -9,7 +8,26 @@ import { add, cmp, isZero } from "../money/money.ts";
 import type { RecognitionMethod } from "./recognition-schedule.ts";
 import { recognitionDate } from "./recognition-dates.ts";
 import { assertEnabled, recognitionBaseAmount } from "./recognition-transaction-price.ts";
-import { recognitionNetRecognized, recognitionPostingRows, recognitionUnearnedRemaining, type FingerprintedRecognitionLine } from "./recognition-posting-rows.ts";
+import {
+  recognitionNetRecognized,
+  recognitionPostingRows,
+  recognitionUnearnedRemaining,
+  type FingerprintedRecognitionLine,
+} from "./recognition-posting-rows.ts";
+
+/** Whether an organization owns the requested accounting book or period. */
+export async function recognitionScopeRowExists(
+  runner: SqlExecutor,
+  orgId: string,
+  table: "accounting_books" | "accounting_periods",
+  id: string,
+): Promise<boolean> {
+  const found = await runner.execute(
+    sql`select 1 from ${sql.identifier(table)} where id = ${id} and org_id = ${orgId}`,
+    "objects",
+  );
+  return found[0] !== undefined;
+}
 
 /* ------------------------------------------------------------------ *
  * Review-and-confirm: the read-only preview behind the Run recognition
@@ -172,37 +190,56 @@ async function recognitionPreviewNames(
   const departments = new Map<string, string>();
   const projects = new Map<string, string>();
   if (ids.accountIds.length > 0) {
-    for (const row of (await runner.execute<{ id: string; number: string | null; name: string | null }>(sql`
+    for (const row of await runner.execute<{
+      id: string;
+      number: string | null;
+      name: string | null;
+    }>(
+      sql`
       select id, number, name from accounts
-       where org_id = ${orgId} and id = any(${list(ids.accountIds)}::uuid[])`, "objects"))) {
+       where org_id = ${orgId} and id = any(${list(ids.accountIds)}::uuid[])`,
+      "objects",
+    )) {
       accounts.set(String(row.id), { number: row.number, name: row.name });
     }
   }
   if (ids.bookIds.length > 0) {
-    for (const row of (await runner.execute<{ id: string; name: string }>(sql`
+    for (const row of await runner.execute<{ id: string; name: string }>(
+      sql`
       select id, name from accounting_books
-       where org_id = ${orgId} and id = any(${list(ids.bookIds)}::uuid[])`, "objects"))) {
+       where org_id = ${orgId} and id = any(${list(ids.bookIds)}::uuid[])`,
+      "objects",
+    )) {
       books.set(String(row.id), row.name);
     }
   }
   if (ids.subsidiaryIds.length > 0) {
-    for (const row of (await runner.execute<{ id: string; name: string }>(sql`
+    for (const row of await runner.execute<{ id: string; name: string }>(
+      sql`
       select id, name from subsidiaries
-       where org_id = ${orgId} and id = any(${list(ids.subsidiaryIds)}::uuid[])`, "objects"))) {
+       where org_id = ${orgId} and id = any(${list(ids.subsidiaryIds)}::uuid[])`,
+      "objects",
+    )) {
       subsidiaries.set(String(row.id), row.name);
     }
   }
   if (ids.departmentIds.length > 0) {
-    for (const row of (await runner.execute<{ id: string; name: string }>(sql`
+    for (const row of await runner.execute<{ id: string; name: string }>(
+      sql`
       select id, name from departments
-       where org_id = ${orgId} and id = any(${list(ids.departmentIds)}::uuid[])`, "objects"))) {
+       where org_id = ${orgId} and id = any(${list(ids.departmentIds)}::uuid[])`,
+      "objects",
+    )) {
       departments.set(String(row.id), row.name);
     }
   }
   if (ids.projectIds.length > 0) {
-    for (const row of (await runner.execute<{ id: string; name: string }>(sql`
+    for (const row of await runner.execute<{ id: string; name: string }>(
+      sql`
       select id, name from projects
-       where org_id = ${orgId} and id = any(${list(ids.projectIds)}::uuid[])`, "objects"))) {
+       where org_id = ${orgId} and id = any(${list(ids.projectIds)}::uuid[])`,
+      "objects",
+    )) {
       projects.set(String(row.id), row.name);
     }
   }
@@ -241,13 +278,16 @@ export async function previewRevenueRecognition(
   // reader, so the preview can never see a line the run would not.
   const contractLineIds = input.contractId
     ? new Set(
-        (await db.execute<{ id: string }>(sql`
+        (
+          await db.execute<{ id: string }>(
+            sql`
           select l.id from recognition_schedule_lines l
            join recognition_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
            join performance_obligations o on o.id = s.obligation_id and o.org_id = s.org_id
-           where l.org_id = ${orgId} and o.contract_id = ${input.contractId}`, "objects")).map((row) =>
-          String(row.id),
-        ),
+           where l.org_id = ${orgId} and o.contract_id = ${input.contractId}`,
+            "objects",
+          )
+        ).map((row) => String(row.id)),
       )
     : null;
 
@@ -287,8 +327,10 @@ export async function previewRevenueRecognition(
 
     if (row.recognition_held || row.delivery_pending) {
       skipReason = row.recognition_held ? "operator_hold" : "delivery_pending";
-      skipDetail = row.recognition_held ? row.hold_reason : 'Record delivery acceptance for every element in this software bundle';
-      amount = '0';
+      skipDetail = row.recognition_held
+        ? row.hold_reason
+        : "Record delivery acceptance for every element in this software bundle";
+      amount = "0";
     } else if (isZero(row.planned)) {
       skipReason = "zero";
       skipDetail = null;
@@ -339,7 +381,8 @@ export async function previewRevenueRecognition(
       }
     }
 
-    if (skipReason === null) totalAmount = add(totalAmount, recognitionBaseAmount(amount, row.recognition_fx_rate));
+    if (skipReason === null)
+      totalAmount = add(totalAmount, recognitionBaseAmount(amount, row.recognition_fx_rate));
 
     rows.push({
       lineId: row.line_id,
@@ -361,9 +404,11 @@ export async function previewRevenueRecognition(
       recognitionOn: row.recognition_on,
       method: row.method,
       bookName: names.books.get(row.book_id) ?? row.book_id,
-      subsidiaryName: row.subsidiary_id ? names.subsidiaries.get(row.subsidiary_id) ?? null : null,
-      departmentName: row.department_id ? names.departments.get(row.department_id) ?? null : null,
-      projectName: row.project_id ? names.projects.get(row.project_id) ?? null : null,
+      subsidiaryName: row.subsidiary_id
+        ? (names.subsidiaries.get(row.subsidiary_id) ?? null)
+        : null,
+      departmentName: row.department_id ? (names.departments.get(row.department_id) ?? null) : null,
+      projectName: row.project_id ? (names.projects.get(row.project_id) ?? null) : null,
       plannedAmount: row.planned,
       currency: row.recognition_currency ?? row.base_currency,
       baseCurrency: row.base_currency,
