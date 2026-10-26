@@ -4,9 +4,7 @@ import { effectivePostingDate } from "../journal/posting-contracts.ts";
 import type { DocumentScriptContext } from "../journal/posting-preconditions.ts";
 import { emitStatusChange, runRecordFlows } from "../flows/run.ts";
 import { loadSubsidiaryContext } from "../organization/subsidiaries.ts";
-import { createObligationsFromInvoice } from "../revenue/recognition.ts";
 import { postingEffectHooks } from "../journal/posting-effect-contributors.ts";
-import { hasStoredValueTenders, settleCashRefundTenders } from "../sales/document-tenders.ts";
 import { claimPostingEffectsForDocument, markPostingEffectsFailed, markPostingEffectsSucceeded, PostingEffectsLeaseFencedError, PostingEffectsTerminalFailureError, type PostingEffectsRow } from "./posting-effects.ts";
 /**
  * Emit post-commit effects for a caller that used `deferEffects` so a larger
@@ -125,21 +123,22 @@ export async function runPostDocumentEffects(
     if (doc.kind === "customer_invoice" || doc.kind === "cash_sale") {
       // A cash sale defers recognition lines like an invoice. Deferred
       // consideration requires the customer contract checked by the service.
-      await createObligationsFromInvoice(doc.id, doc.orgId, effectActorId);
+      await postingEffectHooks.require("revenue").createObligationsFromInvoice(doc.id, doc.orgId, effectActorId);
       await postingEffectHooks.require("stored-value").issueForInvoice(doc.id, doc.orgId, effectActorId);
     } else if (doc.kind === "customer_credit" || doc.kind === "cash_refund") {
       // A cash refund's stored-value tenders settle per tender (top up the
       // named account, or mint from the memo program); the memo-level credit
       // effect stands down while tenders exist so the credit issues once.
       const refundTendered =
-        doc.kind === "cash_refund" && (await hasStoredValueTenders(db, doc.orgId, doc.id));
+        doc.kind === "cash_refund" &&
+        (await postingEffectHooks.require("sales").hasStoredValueTenders(db, doc.orgId, doc.id));
       if (doc.kind === "cash_refund" && refundTendered) {
         if (!entryId) {
           throw new Error(
             `posted cash refund ${doc.documentNumber} has no posted journal entry; stored-value tenders cannot settle`,
           );
         }
-        await settleCashRefundTenders(doc.orgId, doc.id, {
+        await postingEffectHooks.require("sales").settleCashRefundTenders(doc.orgId, doc.id, {
           journalEntryId: entryId,
           actorId: effectActorId,
         });

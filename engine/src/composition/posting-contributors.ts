@@ -7,6 +7,8 @@ import { registerInventoryPostingContributors } from "../inventory/posting-contr
 import { registerPaymentsCorePostingContributors } from "../payments-core/posting-contributors.ts";
 import { registerPayrollPostingContributors } from "../payroll/posting-contributors.ts";
 import { registerProjectsPostingContributors } from "../projects/posting-contributors.ts";
+import { registerRevenuePostingContributors } from "../revenue/posting-contributors.ts";
+import { registerSalesPostingContributors } from "../sales/posting-contributors.ts";
 import { registerScriptingPostingContributors } from "../scripting/posting-contributors.ts";
 import { registerStoredValuePostingContributors } from "../stored-value/posting-contributors.ts";
 import { registerTaxPostingContributors } from "../tax/posting-contributors.ts";
@@ -31,6 +33,8 @@ export function installPostingContributors(): void {
   registerPaymentsCorePostingContributors();
   registerPayrollPostingContributors();
   registerProjectsPostingContributors();
+  registerRevenuePostingContributors();
+  registerSalesPostingContributors();
   registerScriptingPostingContributors();
   registerStoredValuePostingContributors();
   registerTaxPostingContributors();

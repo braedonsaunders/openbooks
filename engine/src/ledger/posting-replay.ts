@@ -18,8 +18,6 @@ import { type PostingDeps, PostingError, effectivePostingDate } from "../journal
 import { assertFinalKernelBalance } from "../journal/posting-invariants.ts";
 import { resolveDeferralAccounts, resolveTaxAccounts, resolveExpenseReceivableDeps, resolveOrgTaxAccounts, resolveTaxComponents, validateRequiredDimensions, resolveOpenItemAccounts } from "./posting-accounts.ts";
 import { postingLineHooks } from "../journal/posting-line-contributors.ts";
-import { resolveCashPostingTenders, TenderRefusal } from "../sales/document-tenders.ts";
-import { CashCloseoutError, resolveCashCloseoutForPosting } from "../sales/cash-closeout.ts";
 import { resolveMarketplaceClearingForDocument } from "./posting-tax-policy.ts";
 import { applySubsidiaries } from "./posting-subsidiaries.ts";
 import { scheduledDeferralByLine } from "../amortization/source-posting.ts";
@@ -160,43 +158,31 @@ export async function regenerateGlImpactTx(
     }
   }
   if ((doc.kind === "cash_sale" || doc.kind === "cash_refund") && !deps.cashTenders) {
-    try {
-      deps = {
-        ...deps,
-        cashTenders: await resolveCashPostingTenders(tx, doc.orgId, doc.id, {
-          kind: doc.kind,
-          documentNumber: doc.documentNumber,
-          kindLabel: doc.kind === "cash_sale" ? "cash sale" : "cash refund",
-          partyId: doc.partyId,
-          custom: doc.custom,
-        }),
-      };
-    } catch (error) {
-      if (error instanceof TenderRefusal) throw new PostingError(error.message);
-      throw error;
-    }
+    deps = {
+      ...deps,
+      cashTenders: await postingLineHooks.require("sales").cashTenders(tx, doc.orgId, doc.id, {
+        kind: doc.kind,
+        documentNumber: doc.documentNumber,
+        kindLabel: doc.kind === "cash_sale" ? "cash sale" : "cash refund",
+        partyId: doc.partyId,
+        custom: doc.custom,
+      }),
+    };
   }
   deps = await withNoChargeUnitsAccount(tx, doc, deps);
   if (doc.kind === "cash_sale" && deps.cashCloseout === undefined) {
-    try {
-      deps = {
-        ...deps,
-        cashCloseout: await resolveCashCloseoutForPosting(
-          tx,
-          doc.orgId,
-          doc.custom,
-          (deps.cashTenders ?? []).map((tender) => ({
-            kind: tender.kind,
-            amountMinor: toUnits(tender.amount),
-          })),
-        ),
-      };
-    } catch (error) {
-      // PostingError carries no remedy field: the named Setup remedy rides
-      // in the message so the operator sees it beside the refusal.
-      if (error instanceof CashCloseoutError) throw new PostingError(`${error.message} ${error.remedy}`);
-      throw error;
-    }
+    deps = {
+      ...deps,
+      cashCloseout: await postingLineHooks.require("sales").cashCloseout(
+        tx,
+        doc.orgId,
+        doc.custom,
+        (deps.cashTenders ?? []).map((tender) => ({
+          kind: tender.kind,
+          amountMinor: toUnits(tender.amount),
+        })),
+      ),
+    };
   }
   if (doc.kind === "vendor_bill" && !deps.inventoryAssetByLine) {
     deps = {

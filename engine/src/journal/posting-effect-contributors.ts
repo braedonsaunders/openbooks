@@ -93,6 +93,29 @@ export interface PostingEffectContributors {
       },
     ): Promise<void>;
   };
+  sales: {
+    /** Redeems a cash sale's stored-value tenders against its entry; a refused tender throws a PostingError. */
+    redeemCashSaleTenders(
+      orgId: string,
+      documentId: string,
+      options: { journalEntryId: string; actorId: string | null },
+    ): Promise<void>;
+    hasStoredValueTenders(runner: SqlExecutor, orgId: string, documentId: string): Promise<boolean>;
+    /** Settles a cash refund's stored-value tenders per tender. */
+    settleCashRefundTenders(
+      orgId: string,
+      documentId: string,
+      options: { journalEntryId: string; actorId: string | null },
+    ): Promise<unknown>;
+  };
+  revenue: {
+    /** Performance obligations of an invoice's deferred lines. */
+    createObligationsFromInvoice(
+      documentId: string,
+      orgId: string,
+      actorId: string | null,
+    ): Promise<unknown>;
+  };
 }
 
 export const postingEffectHooks = postingContributorRegistry<PostingEffectContributors>("effect");

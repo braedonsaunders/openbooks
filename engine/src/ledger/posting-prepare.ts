@@ -20,8 +20,6 @@ import { resolveMarketplaceClearingForDocument, validateTaxControlAccounts } fro
 import { RULES } from "./posting-rules.ts";
 import { assertFinalKernelBalance, assertCreditMemoDirection, retainedKernelLines } from "../journal/posting-invariants.ts";
 import { resolveDeferralAccounts, resolveTaxAccounts, resolveExpenseReceivableDeps, resolveOrgTaxAccounts, resolveTaxComponents, validateRequiredDimensions, resolveOpenItemAccounts } from "./posting-accounts.ts";
-import { resolveCashPostingTenders, TenderRefusal } from "../sales/document-tenders.ts";
-import { CashCloseoutError, resolveCashCloseoutForPosting } from "../sales/cash-closeout.ts";
 import { resolveProviderTaxPlans, resolveShipToSnapshot } from "./posting-provider-tax.ts";
 import { applySubsidiaries } from "./posting-subsidiaries.ts";
 import { resolveInternalBillingPostingContext } from "./internal-billing-posting.ts";
@@ -149,21 +147,16 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
     }
   }
   if ((doc.kind === "cash_sale" || doc.kind === "cash_refund") && !deps.cashTenders) {
-    try {
-      deps = {
-        ...deps,
-        cashTenders: await resolveCashPostingTenders(db, doc.orgId, doc.id, {
-          kind: doc.kind,
-          documentNumber: doc.documentNumber,
-          kindLabel: doc.kind === "cash_sale" ? "cash sale" : "cash refund",
-          partyId: doc.partyId,
-          custom: doc.custom,
-        }, { validateRefundLoads: true }),
-      };
-    } catch (error) {
-      if (error instanceof TenderRefusal) throw new PostingError(error.message);
-      throw error;
-    }
+    deps = {
+      ...deps,
+      cashTenders: await postingLineHooks.require("sales").cashTenders(db, doc.orgId, doc.id, {
+        kind: doc.kind,
+        documentNumber: doc.documentNumber,
+        kindLabel: doc.kind === "cash_sale" ? "cash sale" : "cash refund",
+        partyId: doc.partyId,
+        custom: doc.custom,
+      }, { validateRefundLoads: true }),
+    };
   }
   deps = await withNoChargeUnitsAccount(db, doc, deps);
   // Daily close-out (cash_sale only): tips, processor fees and the counted
@@ -176,25 +169,18 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
     );
   }
   if (doc.kind === "cash_sale" && deps.cashCloseout === undefined) {
-    try {
-      deps = {
-        ...deps,
-        cashCloseout: await resolveCashCloseoutForPosting(
-          db,
-          doc.orgId,
-          doc.custom,
-          (deps.cashTenders ?? []).map((tender) => ({
-            kind: tender.kind,
-            amountMinor: toUnits(tender.amount),
-          })),
-        ),
-      };
-    } catch (error) {
-      // PostingError carries no remedy field: the named Setup remedy rides
-      // in the message so the operator sees it beside the refusal.
-      if (error instanceof CashCloseoutError) throw new PostingError(`${error.message} ${error.remedy}`);
-      throw error;
-    }
+    deps = {
+      ...deps,
+      cashCloseout: await postingLineHooks.require("sales").cashCloseout(
+        db,
+        doc.orgId,
+        doc.custom,
+        (deps.cashTenders ?? []).map((tender) => ({
+          kind: tender.kind,
+          amountMinor: toUnits(tender.amount),
+        })),
+      ),
+    };
   }
   if (doc.kind === "vendor_bill" && !deps.migration) {
     // A hand-coded line for received stock is matched to its order inside

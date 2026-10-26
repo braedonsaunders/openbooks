@@ -28,7 +28,6 @@ import { consolidationSourceRefusal } from "../records/consolidation-source-poli
 
 import { postingPreconditionHooks } from "../journal/posting-preconditions.ts";
 import { enqueuePostingEffects } from "./posting-effects.ts";
-import { redeemCashSaleTenders, TenderRefusal } from "../sales/document-tenders.ts";
 import { insertAuditRecord } from "../journal/kernel-audit.ts";
 import { holdPeriodPostingFence } from "../journal/kernel-fences.ts";
 import { PostingError } from "../journal/posting-contracts.ts";
@@ -339,12 +338,9 @@ async function redeemTenders(
 ): Promise<void> {
   const { doc, deps } = prepared;
   if (doc.kind !== "cash_sale" || deps.migration) return;
-  try {
-    await redeemCashSaleTenders(doc.orgId, doc.id, { journalEntryId: entryId, actorId });
-  } catch (error) {
-    if (error instanceof TenderRefusal) throw new PostingError(error.message);
-    throw error;
-  }
+  await postingEffectHooks
+    .require("sales")
+    .redeemCashSaleTenders(doc.orgId, doc.id, { journalEntryId: entryId, actorId });
 }
 
 /** Provider commit tracking rides in the posting transaction; a replay never enqueues history. */

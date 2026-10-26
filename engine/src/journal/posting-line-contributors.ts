@@ -6,7 +6,7 @@
 import type { SqlExecutor } from "../platform/db.ts";
 import type { ContributedLine, PostContributionResult } from "./contributed-lines.ts";
 import type { EntryLineInput, EntryPlan } from "./entry-allocation-plan.ts";
-import type { KernelLine } from "./posting-contracts.ts";
+import type { CashPostingTender, CashSaleCloseout, KernelLine } from "./posting-contracts.ts";
 import { postingContributorRegistry } from "./posting-contributors.ts";
 
 export interface CustomGlLineRequest {
@@ -117,6 +117,37 @@ export interface PostingLineContributors {
     ): Promise<PostContributionResult>;
     /** Refuses a contributor whose lines do not balance per subsidiary and book. */
     assertContributorBalance(lines: PostContributionResult["lines"]): void;
+  };
+  sales: {
+    /**
+     * The tenders a cash sale or refund settles with, each with its account; a
+     * refused tender throws a PostingError. validateRefundLoads proves a
+     * refund's stored-value loads before the posting writes.
+     */
+    cashTenders(
+      runner: SqlExecutor,
+      orgId: string,
+      documentId: string,
+      parent: {
+        kind: "cash_sale" | "cash_refund";
+        documentNumber: string;
+        kindLabel: string;
+        partyId: string | null;
+        custom: unknown;
+      },
+      options?: { validateRefundLoads?: boolean },
+    ): Promise<CashPostingTender[]>;
+    /**
+     * A cash sale's daily close-out (tips, processor fees, counted over/short)
+     * with its control accounts; a refused close-out throws a PostingError
+     * naming its Setup remedy. Null when the sale carries no close-out.
+     */
+    cashCloseout(
+      runner: SqlExecutor,
+      orgId: string,
+      custom: unknown,
+      tenders: readonly { kind: string; amountMinor: bigint }[],
+    ): Promise<CashSaleCloseout | null>;
   };
 }
 
