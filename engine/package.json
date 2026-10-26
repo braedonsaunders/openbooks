@@ -384,6 +384,7 @@
     "./ledger/partyless-control-policy": "./src/ledger/partyless-control-policy.ts",
     "./ledger/payment-terms-due-date": "./src/ledger/payment-terms-due-date.ts",
     "./ledger/posted-correction-fields": "./src/ledger/posted-correction-fields.ts",
+    "./ledger/posted-correction-preview": "./src/ledger/posted-correction-preview.ts",
     "./ledger/posting-control-account": "./src/ledger/posting-control-account.ts",
     "./ledger/posting-dispatch": "./src/ledger/posting-dispatch.ts",
     "./ledger/posting-document": "./src/ledger/posting-document.ts",
